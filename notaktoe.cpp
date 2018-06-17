@@ -126,6 +126,38 @@ void init_check_win()
   */
 }
 
+#define LOOP(I,J)   for(state_type (i  ## J)=(i ## I)+1, (bits ## J)=(bits ## I)<<1, (state ## J)=(state ## I) | ((bits ## I)<<1); (i ## J)<BOARD_SZ; (i ## J)++, (bits ## J)<<=1, (state ## J) = (state ## I) | (bits ## J)) 
+//if(!check_win(state ## J))
+#define LOOP0 	  for(state_type i1=0, bits1=1, state1=state0 | 1; i1<BOARD_SZ; i1++, bits1<<=1, state1 = state0 | bits1) 
+//if(!check_win(state1))
+
+#define BOARDS1 LOOP0
+#define BOARDS2 BOARDS1 LOOP(1,2)
+#define BOARDS3 BOARDS2 LOOP(2,3)
+#define BOARDS4 BOARDS3 LOOP(3,4)
+#define BOARDS5 BOARDS4 LOOP(4,5)
+#define BOARDS6 BOARDS5 LOOP(5,6)
+#define BOARDS7 BOARDS6 LOOP(6,7)
+#define BOARDS8 BOARDS7 LOOP(7,8)
+#define BOARDS9 BOARDS8 LOOP(8,9)
+#define BOARDS10 BOARDS9 LOOP(9,10)
+#define BOARDS(n) (BOARDS##n)
+
+
+
+
+
+
+//state_type binom_lookup[50][50];
+state_type binom(state_type n, state_type k)
+{
+  if(k==0 || k==n)
+    return 1;
+    return binom(n-1,k-1) + binom(n-1,k);                                                                                                                                          
+    //  return binom_lookup[n-1][k-1] + binom_lookup[n-1][k];
+}
+
+
 int main(int argc, char *argv[])
 {
     try
@@ -139,6 +171,30 @@ int main(int argc, char *argv[])
 	  print_log_g = atoi(argv[3]);
 
 	init_check_win();
+
+	    
+	//	    for(state_type i2=i1+1, bits2=bits1<<1, state2=state1 | (bits1<<1); i2<BOARD_SZ; i2++, bits2<<=1, state2 = state1 | bits2)
+	if(0)
+	{
+	  int BOARD_SZ=BOARD_ROWS*BOARD_COLS;
+	  state_type state0 = state_type(0);
+
+	  int ct=0, win_ct=0;
+	  ct=0, win_ct=0;	  BOARDS1 { ct++; if(check_win(state1)) { win_ct++; continue;} }	  cout << win_ct << " " << ct << " " << binom(BOARD_SZ, 1) << endl;
+	  ct=0, win_ct=0;	  BOARDS2 { ct++; if(check_win(state2)) { win_ct++; continue;} }	  cout << win_ct << " " << ct << " " << binom(BOARD_SZ, 2) << endl;
+	  ct=0, win_ct=0;	  BOARDS3 { ct++; if(check_win(state3)) { win_ct++; continue;} }	  cout << win_ct << " " << ct << " " << binom(BOARD_SZ, 3) << endl;
+	  ct=0, win_ct=0;	  BOARDS4 { ct++; if(check_win(state4)) { win_ct++; continue;} }	  cout << win_ct << " " << ct << " " << binom(BOARD_SZ, 4) << endl;
+	  ct=0, win_ct=0;	  BOARDS5 { ct++; if(check_win(state5)) { win_ct++; continue;} }	  cout << win_ct << " " << ct << " " << binom(BOARD_SZ, 5) << endl;
+	  ct=0, win_ct=0;	  BOARDS6 { ct++; if(check_win(state6)) { win_ct++; continue;} }	  cout << win_ct << " " << ct << " " << binom(BOARD_SZ, 6) << endl;
+	  ct=0, win_ct=0;	  BOARDS7 { ct++; if(check_win(state7)) { win_ct++; continue;} }	  cout << win_ct << " " << ct << " " << binom(BOARD_SZ, 7) << endl;
+	  ct=0, win_ct=0;	  BOARDS8 { ct++; if(check_win(state8)) { win_ct++; continue;} }	  cout << win_ct << " " << ct << " " << binom(BOARD_SZ, 8) << endl;
+	  ct=0, win_ct=0;	  BOARDS9 { ct++; if(check_win(state9)) { win_ct++; continue;} }	  cout << win_ct << " " << ct << " " << binom(BOARD_SZ, 9) << endl;
+
+
+	}
+
+
+
 
         cache_init(pow(2,BOARD_ROWS*BOARD_COLS));
 
