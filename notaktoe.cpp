@@ -93,6 +93,13 @@ static const state_type BitReverseTable256[] =
   };
 
 
+inline state_type bit_reverse8(state_type state, uint bits)
+{
+
+// Option 1:
+  return ((BitReverseTable256[(state) & 0xff])) >> (8-bits); 
+}
+
 
 
 inline state_type bit_reverse(state_type state, uint bits)
@@ -109,12 +116,13 @@ inline state_type bit_reverse(state_type state, uint bits)
 	  (BitReverseTable256[(state>> 48) & 0xff] << 8) |
 	  (BitReverseTable256[(state>> 56) & 0xff] << 0) 
     ) >> (64-bits);
-
+  /*
      state_type result=0;
   for(int i=0; i<bits; i++)
     result = (result << 1 | (state & 1)), state>>=1;
 
     return result;
+  */
   //  return ((state & 1) << 4) | ((state & 2) << 2) | ((state & 4)) | ((state&8) >> 2) | ((state & 16) >> 4);
     /*
   state_type result = state;
@@ -171,7 +179,7 @@ state_type get_equiv_state(state_type state, int type)
 	  state_type row = state2 & WIN_MASK_HORIZ;
 
 	  state2 >>= BOARD_COLS;
-	  row = bit_reverse(row, BOARD_COLS);
+	  row = bit_reverse8(row, BOARD_COLS);
 	  
 	  for(int j=0; j<BOARD_COLS; j++)
 	    {
@@ -190,8 +198,8 @@ state_type get_equiv_state(state_type state, int type)
 #include "crc64.cpp"
 state_type *computed_hash;
 bool *value_hash;
-#define CACHE_MASK  0x00ffffff;
-#define CACHE_BITS  24
+#define CACHE_MASK  0x0fffffff;
+#define CACHE_BITS  28
 
 void cache_init(state_type count)
 {
@@ -203,12 +211,20 @@ void cache_init(state_type count)
     computed_hash[0] = -1;
 }
 
+
+
 //inline uint8_t ht_bitpattern(state_type state)  { return uint8_t(1) << (uint8_t(state) & uint8_t(7)); }
 //inline state_type ht_index(state_type state) { return state >> state_type(3); }
 //#include "xxhash_cpp/xxhash/xxhash.hpp"
 #include "xxHash/xxhash.h"
 int eval=0;
 int collide=0, calls=0;
+
+state_type get_hash(state_type s2)
+{
+  return XXH64((char *) &s2, sizeof(state_type), 0);
+}
+
 inline bool cache_get_val(state_type state, int arg2)
 {
   calls ++;
@@ -221,13 +237,23 @@ inline bool cache_get_val(state_type state, int arg2)
 	//	if(computed_hash[ index ] & bitpat)
 	//	  return value_hash[ index ] & bitpat;
 	//	cout << s2 << " " << calculate_crc((char *) &s2, 8) << endl;
-	state_type hash = XXH64((char *) &s2, sizeof(state_type), 0) & CACHE_MASK;
+	state_type hash = get_hash(s2) & CACHE_MASK; //XXH64((char *) &s2, sizeof(state_type), 0) & CACHE_MASK;
 	//	if(computed_hash[hash] != 0 && computed_hash[hash] != s2)
 	//	  cout << computed_hash[hash] << " " << s2 << " " << hash << " " << endl;
 	if((computed_hash[hash] >> 8) == s2)
 	  return computed_hash[hash] & 1;
-	else if((computed_hash[hash] >> 8) != 0)
+	else if((computed_hash[hash] >> 8) != 0 && i==0)
+	  {
 	  collide++;
+	  /*	  cout << state_to_string(computed_hash[hash] >> 8) << endl << state_to_string(s2) << endl <<endl<<endl;
+	  cout << hash;
+	  state_type t = computed_hash[hash];
+	  t>>=8;
+	  t = get_hash(t);
+	  t &= CACHE_MASK;
+	  cout << " " << t << endl;
+	  */
+	  }
       }
 
     //    state_type index = ht_index(state);
@@ -235,7 +261,7 @@ inline bool cache_get_val(state_type state, int arg2)
 
     bool val;
     eval++;
-    state_type hash = XXH64((char *) &state, sizeof(state_type), 0) & CACHE_MASK;
+    state_type hash = get_hash(state) & CACHE_MASK; // XXH64((char *) &state, sizeof(state_type), 0) & CACHE_MASK;
     //    if( (val = p1(state, arg2)) )
     //      value_hash[hash] = true;
     //    val = value_hash[hash] = p1(state, arg2);
