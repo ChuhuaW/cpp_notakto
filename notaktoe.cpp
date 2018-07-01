@@ -31,9 +31,12 @@ string state_to_string(state_type state)
 //
 bool check_win(state_type state)
 {
-    for(uint i=0; i<BOARD_ROWS; i++)
-      if((state | (WIN_MASK_HORIZ << (i * BOARD_COLS))) == state)
+  state_type state2 = state;
+  for(uint i=0; i<BOARD_ROWS; i++, state2 >>= BOARD_COLS)
+    {
+    if((state2 & WIN_MASK_HORIZ) == WIN_MASK_HORIZ)
 	return true;
+    }
 
     for(uint i=0; i<BOARD_COLS; i++)
       if((state | (WIN_MASK_VERT << i)) == state)
@@ -141,6 +144,7 @@ inline state_type bit_reverse(state_type state, uint bits)
 }
 
 
+
 state_type get_equiv_state(state_type state, int type)
 {
   if(type == 0)
@@ -196,19 +200,30 @@ state_type get_equiv_state(state_type state, int type)
 }
 
 #include "crc64.cpp"
-state_type *computed_hash;
-bool *value_hash;
-#define CACHE_MASK  0x0fffffff;
-#define CACHE_BITS  28
+state_type **computed_hash;
+state_type *CACHE_MASK;
+state_type MAX_BIT=0;
+unsigned int *CACHE_BITS;
+//#define CACHE_MASK  0x03ffffff;
+//#define CACHE_BITS  26
 
-void cache_init(state_type count)
+void cache_init(state_type count, int levels=1)
 {
   //  generate_table();
   cerr << "initializing " << endl;
-  computed_hash = (state_type *) memset(new state_type[(int)pow(2, CACHE_BITS)], 0, sizeof(state_type) * (int)pow(2, CACHE_BITS));
+  computed_hash = new state_type *[levels];
+  CACHE_MASK = new state_type[levels];
+  CACHE_BITS = new unsigned int[levels];
+  MAX_BIT = pow(2, BOARD_ROWS*BOARD_COLS);
+  for(int i=0; i<levels; i++)
+    {
+      CACHE_BITS[i] = min(5*(i+1), 26);
+      CACHE_MASK[i] = state_type(pow(2, CACHE_BITS[i]) - 1);
+      computed_hash[i] = (state_type *) memset(new state_type[(int)pow(2, CACHE_BITS[i])], 0, sizeof(state_type) * (int)pow(2, CACHE_BITS[i]));
+      computed_hash[i][0] = -1;
+    }
   //    value_hash = (bool *) memset(new bool[(int)pow(2, CACHE_BITS)], 0, sizeof(bool) * (int)pow(2, CACHE_BITS));
   cerr << "done initializing " << endl;
-    computed_hash[0] = -1;
 }
 
 
@@ -217,37 +232,55 @@ void cache_init(state_type count)
 //inline state_type ht_index(state_type state) { return state >> state_type(3); }
 //#include "xxhash_cpp/xxhash/xxhash.hpp"
 #include "xxHash/xxhash.h"
-int eval=0;
-int collide=0, calls=0;
+#include <vector>
+#include <iostream>
+#include <iomanip>
+using namespace std;
 
+vector<state_type> eval(100), calls(100), collide(100);
+state_type tcalls=0;
 state_type get_hash(state_type s2)
 {
   return XXH64((char *) &s2, sizeof(state_type), 0);
 }
 
+void print_calls()
+{
+      {
+	cout << "TCALLS " << tcalls << endl;
+	cout << "evals" << "\t" << "collisions" << "\t" << "calls" << endl;
+	cout << setw(5);
+	for(int i=0; i<BOARD_ROWS*BOARD_COLS; i++)
+	  cout << i << "\t" << CACHE_BITS[i] << "\t" << eval[i] << " (" << double(eval[i])/calls[i]*100 << ") \t\t" << collide[i] << " (" << double(collide[i])/calls[i]*100 << ", " << double(collide[i]) / eval[i]*100 << ") \t\t" << calls[i] << endl;
+	cout << "----" << endl;
+      }
+}
+
 inline bool cache_get_val(state_type state, int arg2)
 {
-  calls ++;
-    for(int i=0; i<=5; i++)
+  state_type *ch = computed_hash[arg2];
+  tcalls++;
+  calls[arg2-2] ++;
+    for(int i=0; i<=0; i++)
       {
 	state_type s2 = get_equiv_state(state, i);
 	//	state_type index = ht_index(s2);
 	//	uint8_t bitpat = ht_bitpattern(s2);
 
-	//	if(computed_hash[ index ] & bitpat)
+	//	if(ch[ index ] & bitpat)
 	//	  return value_hash[ index ] & bitpat;
 	//	cout << s2 << " " << calculate_crc((char *) &s2, 8) << endl;
-	state_type hash = get_hash(s2) & CACHE_MASK; //XXH64((char *) &s2, sizeof(state_type), 0) & CACHE_MASK;
-	//	if(computed_hash[hash] != 0 && computed_hash[hash] != s2)
-	//	  cout << computed_hash[hash] << " " << s2 << " " << hash << " " << endl;
-	if((computed_hash[hash] >> 8) == s2)
-	  return computed_hash[hash] & 1;
-	else if((computed_hash[hash] >> 8) != 0 && i==0)
+	state_type hash = get_hash(s2) & CACHE_MASK[arg2-2]; //XXH64((char *) &s2, sizeof(state_type), 0) & CACHE_MASK[arg2];
+	//	if(ch[hash] != 0 && ch[hash] != s2)
+	//	  cout << ch[hash] << " " << s2 << " " << hash << " " << endl;
+	if((ch[hash] >> 8) == s2)
+	  return ch[hash] & 1;
+	else if((ch[hash] >> 8) != 0 && i==0)
 	  {
-	  collide++;
-	  /*	  cout << state_to_string(computed_hash[hash] >> 8) << endl << state_to_string(s2) << endl <<endl<<endl;
+	  collide[arg2-2]++;
+	  /*	  cout << state_to_string(ch[hash] >> 8) << endl << state_to_string(s2) << endl <<endl<<endl;
 	  cout << hash;
-	  state_type t = computed_hash[hash];
+	  state_type t = ch[hash];
 	  t>>=8;
 	  t = get_hash(t);
 	  t &= CACHE_MASK;
@@ -260,19 +293,19 @@ inline bool cache_get_val(state_type state, int arg2)
     //    uint8_t bitpat = ht_bitpattern(state);
 
     bool val;
-    eval++;
-    state_type hash = get_hash(state) & CACHE_MASK; // XXH64((char *) &state, sizeof(state_type), 0) & CACHE_MASK;
+    eval[arg2-2]++;
+    state_type hash = get_hash(state) & CACHE_MASK[arg2-2]; // XXH64((char *) &state, sizeof(state_type), 0) & CACHE_MASK;
     //    if( (val = p1(state, arg2)) )
     //      value_hash[hash] = true;
     //    val = value_hash[hash] = p1(state, arg2);
     //    val = value_hash[hash] = p1(state, arg2);
     val = p1(state, arg2);
-    computed_hash[hash] = (state << 8) | val;
+    ch[hash] = (state << 8) | val;
     //        value_hash[ index ] |= bitpat;
-    //    computed_hash[ index ] |= bitpat;
-    
-    if(calls % 1000000 == 0)
-      cerr << calls << " " << eval << " " << collide << endl;
+    //    ch[ index ] |= bitpat;
+
+    if(tcalls % 1000000 == 0)
+    print_calls();
 
     return val;
 }
@@ -281,14 +314,16 @@ inline bool cache_get_val(state_type state, int arg2)
 //   (or if the other player has already lost)
 bool p1(state_type state, int depth=0)
 {
-    if(depth == 3)
+    if(depth < 6)
     cout << state_to_string(state) << endl;
     if(check_win(state))
         return true;
 
-    state_type new_state;
-    for(state_type i=0; i<BOARD_ROWS*BOARD_COLS; i++)
-      if(( new_state = (state | (state_type(1) << i)) ) != state && !cache_get_val(new_state, depth+1))
+    //    state_type new_state;
+    //    for(state_type i=0; i<BOARD_ROWS*BOARD_COLS; i++)
+    for(state_type i=1; i<MAX_BIT; i <<= 1)
+      if( (state | i) != state && !cache_get_val(state | i, depth+1))
+	//      if(( new_state = (state | (state_type(1) << i)) ) != state && !cache_get_val(new_state, depth+1))
 	  return true;
 
     return false;
@@ -395,7 +430,7 @@ int main(int argc, char *argv[])
 
 
 
-        cache_init(pow(2,BOARD_ROWS*BOARD_COLS));
+        cache_init(pow(2,BOARD_ROWS*BOARD_COLS), BOARD_ROWS*BOARD_COLS);
 
         cout << "Player 1 " << (p1(0000,1) ? "can" : "cannot") << " force a win." << endl;
 	/*
@@ -413,9 +448,7 @@ int main(int argc, char *argv[])
         cout << "Player 2 " << (p2_force ? "can" : "cannot") << " force a win." << endl;
 	*/
 
-	cerr << calls << endl;
-	cerr << eval << endl;
-	cerr << collide << endl;
+	print_calls();
         return 0;
     }
     catch(string err)
