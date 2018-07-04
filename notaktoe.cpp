@@ -241,7 +241,8 @@ vector<state_type> eval(100), calls(100), collide(100);
 state_type tcalls=0;
 state_type get_hash(state_type s2)
 {
-  return XXH64((char *) &s2, sizeof(state_type), 0);
+  //  return s2;
+    return XXH64((char *) &s2, sizeof(state_type), 0);
 }
 
 void print_calls()
@@ -263,7 +264,7 @@ inline bool cache_get_val(state_type state, int arg2)
   calls[arg2-2] ++;
     for(int i=0; i<=0; i++)
       {
-	state_type s2 = get_equiv_state(state, i);
+	state_type s2 = state; //get_equiv_state(state, i);
 	//	state_type index = ht_index(s2);
 	//	uint8_t bitpat = ht_bitpattern(s2);
 
@@ -304,7 +305,7 @@ inline bool cache_get_val(state_type state, int arg2)
     //        value_hash[ index ] |= bitpat;
     //    ch[ index ] |= bitpat;
 
-    if(tcalls % 1000000 == 0)
+    if(tcalls % 10000000 == 0)
     print_calls();
 
     return val;
@@ -322,7 +323,7 @@ bool p1(state_type state, int depth=0)
     //    state_type new_state;
     //    for(state_type i=0; i<BOARD_ROWS*BOARD_COLS; i++)
     for(state_type i=1; i<MAX_BIT; i <<= 1)
-      if( (state | i) != state && !cache_get_val(state | i, depth+1))
+      if( !(state & i) && !cache_get_val(state | i, depth+1))
 	//      if(( new_state = (state | (state_type(1) << i)) ) != state && !cache_get_val(new_state, depth+1))
 	  return true;
 
@@ -390,6 +391,8 @@ state_type binom(state_type n, state_type k)
     //  return binom_lookup[n-1][k-1] + binom_lookup[n-1][k];
 }
 
+#include<algorithm>
+#include<parallel/algorithm>
 
 int main(int argc, char *argv[])
 {
@@ -427,8 +430,54 @@ int main(int argc, char *argv[])
 
 	}
 
+	if(0){
+	// start with full board
+	vector< state_type > states, new_states;
+	states.push_back((state_type(pow(2,BOARD_ROWS*BOARD_COLS)-1) << 1) | 1);
 
+	// remove one piece at a time
+	for(int ii=BOARD_ROWS*BOARD_COLS; ii>0; ii--)
+	  {
+	    cerr << "LEVEL " << ii << endl;
+	    cerr << "listing..." << endl;
+	    new_states.clear();
+	    new_states.reserve(states.size()*ii);
+	    for(int j=0; j<states.size(); j++)
+	      {
+		state_type state = states[j] >> 1;
+		bool state_won = states[j] & 1;
 
+		for(int i=0; i<BOARD_ROWS*BOARD_COLS; i++)
+		  if(state & (1 << i))
+		    new_states.push_back(( (state ^ (1 << i)) << 1) | (!state_won));
+	      }
+	    
+	    states.clear();
+	    states.reserve(binom(BOARD_ROWS*BOARD_COLS, ii-1));
+	    cerr << "sorting... " << new_states.size() << endl;
+	    __gnu_parallel::sort(new_states.begin(), new_states.end());
+	    cerr << "uniq'ing..." << endl;
+	    state_type last = -1;
+	    for(int i=0; i<new_states.size(); )
+	      {
+		last = new_states[i] >> 1;
+		int new_i=i;
+		bool any=false;
+		while(last == (new_states[new_i] >> 1) && new_i < new_states.size())
+		  {
+		    any =  any || (new_states[new_i] & 1);
+		    new_i++;
+		  }
+		states.push_back(( last << 1) | ( any || check_win(last)));
+		//		cout << state_to_string(last) << " " << (any || check_win(last))<< endl << endl;
+		i = new_i;
+	      }
+
+	    cerr << states.size() << " " << (states[0] & 1) << endl;
+	  }
+
+	return 0;
+	}
 
         cache_init(pow(2,BOARD_ROWS*BOARD_COLS), BOARD_ROWS*BOARD_COLS);
 
