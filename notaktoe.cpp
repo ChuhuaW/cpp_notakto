@@ -78,16 +78,24 @@ bool check_win(state_type state)
 // simple bit cache -- see if we already know value for this state, if so return it,
 //  if not compute and return it
 //
-char *bitcomputed_hash, *bitvalue_hash;
+state_type TOP_BITS=2, TOP_BITS_MASK=3, NOTOPBITS_MASK;
+state_type **computed_hash;
+state_type *CACHE_MASK;
+state_type MAX_BIT=0;
+unsigned int *CACHE_BITS;
+
+
+state_type *bitvalue_hash;
 void bitcache_init(state_type count)
 {
   //    bitcomputed_hash = (char *) memset(new char[count/8+1], 0, count/8+1);
-    bitvalue_hash = (char *) memset(new char[count/4+1], 0, count/4+1);
+  bitvalue_hash = (state_type *) memset(new state_type[count/4/8/(state_type)pow(2,TOP_BITS)+1], 0, (count/4/8/pow(2,TOP_BITS)+1) * sizeof(state_type));
+  NOTOPBITS_MASK = (~((TOP_BITS_MASK) << (BOARD_SIZE-TOP_BITS))) & (MAX_BIT-1);
 }
 
 //inline uint8_t ht_bitpattern(state_type state)  { return uint8_t(1) << (uint8_t(state) & uint8_t(7)); }
 //inline uint8_t ht_bitpattern(state_type state)  { return uint8_t(3) << ((uint8_t(state) & uint8_t(3)) << 1); }
-inline state_type ht_index(state_type state) { return state >> state_type(2); }
+//inline state_type ht_index(state_type state) { return state >> state_type(5); }
 //inline state_type ht_index(state_type state) { return state >> state_type(3); }
 
 
@@ -181,11 +189,6 @@ state_type get_equiv_state(state_type state, int type)
   return state;
 }
 
-state_type **computed_hash;
-state_type *CACHE_MASK;
-state_type MAX_BIT=0;
-unsigned int *CACHE_BITS;
-
 void cache_init(state_type count, int levels=1)
 {
   cerr << "initializing " << endl;
@@ -217,9 +220,13 @@ inline bool cache_get_val(state_type state, int arg2)
       state_type s2 = get_equiv_state(state, i);
       if(ALGO == BITCACHE)
 	{
-	  unsigned char val = bitvalue_hash[ ht_index(s2) ] >> ((s2 & 3) << 1);
+	  if(((s2 >> (BOARD_SIZE-TOP_BITS)) == TOP_BITS_MASK))
+	    {
+	      state_type val = bitvalue_hash[ (s2 & NOTOPBITS_MASK) >> state_type(5) ] >> ((s2 & 31) << 1);
+		  //	  unsigned char val = (((unsigned char *)bitvalue_hash)[ state >> state_type(2) ] >> ((s2 & 3) << 1));
 	  if(val & 1)
 	    return val & 2;
+	    }
 	}
       else 
 	{
@@ -235,7 +242,12 @@ inline bool cache_get_val(state_type state, int arg2)
     {
       state_type s2 = get_equiv_state(state, i);
       if(ALGO == BITCACHE)
-	bitvalue_hash[ ht_index(s2) ] |= (uint8_t(( (val?1:0) << 1) | 1) << ((uint8_t(s2) & uint8_t(3)) << 1));
+	{
+	  if(((s2 >> (BOARD_SIZE-TOP_BITS)) == TOP_BITS_MASK))
+	  bitvalue_hash[ (s2 & NOTOPBITS_MASK) >> state_type(5) ] |= ((val?3L:1L) << ((uint8_t(s2) & uint8_t(31)) << 1));
+		//		cout << state_to_string(s2) << endl;
+	}
+      //	((unsigned char*)bitvalue_hash)[  state >> state_type(2) ] |= ((val?3:1) << ((uint8_t(s2) & uint8_t(3)) << 1));
       else
 	ch[ get_hash(s2) & CACHE_MASK[arg2-2] ] = (s2 << 8) | val;
     }
@@ -355,22 +367,25 @@ int main(int argc, char *argv[])
 	  cache_init(pow(2,BOARD_ROWS*BOARD_COLS), BOARD_ROWS*BOARD_COLS);
 	
         cout << "Player 1 " << (p1(0000,1) ? "can" : "cannot") << " force a win." << endl;
-	/*
-	state_type ct=0,ct2=0;
-	for(state_type i=0; i<MAX_BIT/4; i++)
+	
+	/*	vector<state_type> ct(16);
+	for(state_type i=0; i<MAX_BIT/32; i++)
 	  {
 	    bool f = true;
-	    for(state_type j=0; j<4; j++)
+	    for(state_type j=0; j<32; j++)
 	      {
-		ct += ((bitvalue_hash[i] >> (j*2)) & 1);
+		//		cout << (i >> (BOARD_SIZE-4)) << endl;
+		ct[(i*32) >> (BOARD_SIZE-4)] += ((bitvalue_hash[i] >> (j*2)) & 1);
 		//		cout << (((bitvalue_hash[i] >> (j*2)) & 1)?"X":"_");
-		if((bitvalue_hash[i] >> (j*2)) & 1)
-		  f = false;
+		//		if((bitvalue_hash[i] >> (j*2)) & 1)
+		//		  f = false;
 	      }
 	    //	    cout << endl;
-	    if(!f) ct2+=4;
+	    //    if(!f) ct2+=4;
 	  }
-	cout << ct << " " << ct2 << endl;
+
+	for(int i=0; i<16; i++)
+	  cout << i << " " << ct[i] << endl;
 	*/
         return 0;
     }
