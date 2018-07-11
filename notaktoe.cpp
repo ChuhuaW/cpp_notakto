@@ -221,10 +221,26 @@ void bitcache_init(state_type count)
    cerr << "done initializing " << endl;
  }
 
-vector<state_type> ct(16);
+vector<state_type> ct;
 state_type ct2=0;
 
-state_type r_hybrid=0, w_hybrid=0;
+state_type r_hybrid=0, w_hybrid=0, r_bit=0, w_bit=0;
+
+void print_status()
+{
+  for(int i=0; i<pow(2,TOP_BITS); i++)
+    if(ct[i] > 0)
+      cout << i << " " << std::bitset<15>(i) << " " << ct[i] << endl;
+  
+
+  cout << "----- Total states written: " << ct2 << "  " << (double(ct2) / pow(2.0, BOARD_SIZE))*100 << "%" << endl;
+  cout << "Bit cache    reads: " << r_bit << "  writes: " << w_bit << endl;
+  cout << "Hybird cache reads: " << r_hybrid << "  writes: " << w_hybrid << endl;
+  
+}
+
+
+
  inline bool cache_get_val(state_type state, int arg2)
  {
    state_type *ch;
@@ -239,6 +255,7 @@ state_type r_hybrid=0, w_hybrid=0;
 	 {
 	   if(((s2 >> (BOARD_SIZE-TOP_BITS)) == TOP_BITS_MASK))
 	     {
+	       r_bit++;
 	       state_type val = bitvalue_hash[ (s2 & NOTOPBITS_MASK) >> state_type(5) ] >> ((s2 & 31) << 1);
 	       if(val & 1)
 		 return val & 2;
@@ -271,20 +288,16 @@ state_type r_hybrid=0, w_hybrid=0;
      {
        state_type s2 = get_equiv_state(state, i);
        ct2++;
-       ct[( s2 >> (BOARD_SIZE-4))]++;
+       ct[( s2 >> (BOARD_SIZE-TOP_BITS))]++;
        if(!(ct2 % 50000000))
-	 {
-	   cout << "-----" << endl;
-	   cout << ct2 << endl;
-	   for(int i=0; i<16; i++)
-	     cout << i << " " << ct[i] << endl;
-	   
-	   cerr << r_hybrid << " " << w_hybrid << endl;
-	 }
+	   print_status();
        if(ALGO == HYBRID)
 	 {
 	   if(((s2 >> (BOARD_SIZE-TOP_BITS)) == TOP_BITS_MASK))
+	     {
 	     bitvalue_hash[ (s2 & NOTOPBITS_MASK) >> state_type(5) ] |= ((val?3L:1L) << ((uint8_t(s2) & uint8_t(31)) << 1));
+	     w_bit++;
+	     }
 	   else
 	     {
 	       //	       cout << std::bitset<25>(s2) << endl;
@@ -412,6 +425,8 @@ int main(int argc, char *argv[])
 	  bitcache_init(MAX_BIT);
 	else if(ALGO == HASHCACHE)
 	  cache_init(pow(2,BOARD_ROWS*BOARD_COLS), BOARD_ROWS*BOARD_COLS);
+
+	ct=vector<state_type>(pow(2,TOP_BITS));
 	
         cout << "Player 1 " << (p1(0000,1) ? "can" : "cannot") << " force a win." << endl;
 	
@@ -433,10 +448,7 @@ int main(int argc, char *argv[])
 	    //    if(!f) ct2+=4;
 	  }
 	*/
-	for(int i=0; i<16; i++)
-	  cout << i << " " << ct[i] << endl;
-	
-	cerr << r_hybrid << " " << w_hybrid << endl;
+	print_status();
         return 0;
     }
 
