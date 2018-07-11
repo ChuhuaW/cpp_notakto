@@ -83,7 +83,7 @@ state_type **computed_hash;
 state_type *CACHE_MASK;
 state_type MAX_BIT=0;
 unsigned int *CACHE_BITS;
-state_type HYBRID_MASK, HYBRID_BITS = 26;
+state_type HYBRID_MASK, HYBRID_BITS = 30;
 state_type *ch_hybrid;
 state_type *bitvalue_hash;
 void bitcache_init(state_type count)
@@ -92,7 +92,7 @@ void bitcache_init(state_type count)
   //    bitcomputed_hash = (char *) memset(new char[count/8+1], 0, count/8+1);
   if(ALGO==HYBRID)
     {
-      cerr << "caches have size " << sizeof(state_type) * (count/4/8/(state_type)pow(2,TOP_BITS)+1) << " bytes, " << (int)pow(2, HYBRID_BITS) * sizeof(state_type) << " bytes" << endl;
+      cerr << "caches have size " << sizeof(state_type) * (count/4/8/(state_type)pow(2,TOP_BITS)+1) << " bytes, " << (state_type)pow(2, HYBRID_BITS) * sizeof(state_type) << " bytes" << endl;
       bitvalue_hash = (state_type *) memset(new state_type[count/4/8/(state_type)pow(2,TOP_BITS)+1], 0, (count/4/8/pow(2,TOP_BITS)+1) * sizeof(state_type));
       TOP_BITS_MASK = state_type(pow(2, TOP_BITS)-1);
       NOTOPBITS_MASK = (~((TOP_BITS_MASK) << (BOARD_SIZE-TOP_BITS))) & (MAX_BIT-1);
