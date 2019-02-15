@@ -17,11 +17,12 @@ using namespace std;
 uint BOARD_ROWS, BOARD_COLS, BOARD_SIZE;
 state_type WIN_MASK_HORIZ, WIN_MASK_VERT, WIN_MASK_DIAG2, WIN_MASK_DIAG1;
 bool p1(state_type, int);
-typedef enum {BITCACHE=0, HASHCACHE=1, BOTTOMUP=2, HYBRID=3} Algos;
+typedef enum {BITCACHE=0, HASHCACHE=1, BOTTOMUP=2, HYBRID=3, LEVELED=4} Algos;
 Algos  ALGO;
 // set disable_diag to true if you don't want to count complete diagonals as terminal states
 bool DISABLE_DIAG=false;
 int READ_EQUIV=0, WRITE_EQUIV=0;
+int INTERACTIVE=0;
 inline state_type get_hash(state_type s2) {    return XXH64((char *) &s2, sizeof(state_type), 0); }
 
 // print a state in a more readable way
@@ -314,6 +315,8 @@ void print_status()
     return val;
 }
 
+#define COMPLETE 
+
 // return true iff at least *1* of my possible moves from this state results in a win
 //   (or if the other player has already lost)
 bool p1(state_type state, int depth=0)
@@ -321,10 +324,17 @@ bool p1(state_type state, int depth=0)
     if(check_win(state))
         return true;
 
-    //        for(state_type i=1; i<MAX_BIT; i <<= 1)
-	 for(state_type i=(MAX_BIT >> 1); i!=0; i >>=1)
+#ifdef COMPLETE
+    bool a=false;
+    for(state_type i=(MAX_BIT >> 1); i!=0; i >>=1)
+      if( !(state & i) && !cache_get_val(state | i, depth+1))
+	a=true;
+    return a;
+#else
+    for(state_type i=(MAX_BIT >> 1); i!=0; i >>=1)
       if( !(state & i) && !cache_get_val(state | i, depth+1))
 	  return true;
+#endif
 
     return false;
 }
@@ -353,6 +363,7 @@ int main(int argc, char *argv[])
 		       "  --nodiag:    ignore diagonal wins \n"
 		       "  --readeq n:  when looking up states, look also for up to n equivalent states (rotations, flips, etc)\n"
 		       "  --writeeq n: after calculating for new state, update cache for up to n equivalent states (rotations, flips, etc)\n"
+		       "  --interact:  interactive mode \n"
 		       );
 	int ii=1;
 	for( ; ii<argc; ii++)
@@ -360,6 +371,7 @@ int main(int argc, char *argv[])
 	  else if(string(argv[ii]) == "--nodiag") DISABLE_DIAG = true;
 	  else if(string(argv[ii]) == "--readeq") READ_EQUIV = atoi(argv[++ii]);
 	  else if(string(argv[ii]) == "--writeeq") WRITE_EQUIV = atoi(argv[++ii]);
+	  else if(string(argv[ii]) == "--interact") INTERACTIVE = 1;
 	  else break;
 
 	BOARD_ROWS = atoi(argv[ii]);
@@ -416,6 +428,11 @@ int main(int argc, char *argv[])
 		  }
 		
 		cerr << states.size() << " " << (states[0] & 1) << endl;
+
+
+		for(int i=0; i<states.size(); i++)
+		  cout << (states[i] >> 1) << " " << (states[i] & 1) << endl;
+		
 	      }
 	    
 	    return 0;
@@ -449,6 +466,57 @@ int main(int argc, char *argv[])
 	  }
 	*/
 	print_status();
+
+	if(INTERACTIVE)
+	  {
+	    state_type state=0, new_state=0;
+
+	    int p=0;
+	    while(1) 
+	      {
+		cout << "------" << endl;
+		cout << "CURRENT BOARD:" << endl;
+		cout << state_to_string(state) << endl;
+
+		char status[BOARD_SIZE];
+		for(int i=0; i<BOARD_SIZE; i++)
+		  {
+		  if(state & (1 << i))
+		    status[i] = 'X';
+		  else if(check_win(state | (1 << i)))
+		    status[i] = '!';
+		  else if(!cache_get_val(state | (1 << i), 0))
+		    status[i] = 'w';
+		  else 
+		    status[i] = '.';
+		  }
+
+		cout << "Here's what would happen if current player chooses each square:\n";
+		cout << "X = square already occupied, ! = immediate loss, w = current player can force win, . = current player cannot force win\n";
+		for(uint i=0, n=BOARD_SIZE-1; i<BOARD_ROWS; i++)
+		  {
+		  for(uint j=0; j<BOARD_COLS; j++, n--)
+		    cout << status[n];
+		  cout << endl;
+		  }
+
+		int row,col;
+		cout << "Player " << p+1 << ", ";
+		cout << "where to play? (give row col pair, e.g. '0 0' for upper-left): " << endl;
+		cin >> row >> col;
+		row = BOARD_ROWS-row-1;
+		col = BOARD_COLS-col-1;
+		new_state |= (1 << (row*BOARD_ROWS+col));
+
+		if(new_state != state)
+		  p=(++p)%2;
+		state = new_state;
+	      }
+
+	  }
+
+
+
         return 0;
     }
 
