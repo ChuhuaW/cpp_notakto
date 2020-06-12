@@ -2,28 +2,53 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 #include <inttypes.h>
 #include <bitset>
-#include<algorithm>
-#include<parallel/algorithm>
+#include <algorithm>
+#include <parallel/algorithm>
 #include "xxHash/xxhash.h"
 #include <vector>
 #include <iostream>
 #include <iomanip>
+#include <typeinfo>
+#include <tuple> 
+#include <map>
+#include <time.h>
+#include <fstream>
+#include <unordered_set>
 
 typedef uint64_t state_type;
 using namespace std;
+
+
+class state_type_hash
+{
+public:
+	size_t operator()( const state_type & s2 ) const // <-- don't forget const
+	{
+		return XXH64((char *) &s2, sizeof(state_type), 0);;
+	}
+};
 
 uint BOARD_ROWS, BOARD_COLS, BOARD_SIZE;
 state_type WIN_MASK_HORIZ, WIN_MASK_VERT, WIN_MASK_DIAG2, WIN_MASK_DIAG1;
 bool p1(state_type, int);
 typedef enum {BITCACHE=0, HASHCACHE=1, BOTTOMUP=2, HYBRID=3, LEVELED=4} Algos;
-Algos  ALGO;
+Algos  ALGO = (Algos)0;
 // set disable_diag to true if you don't want to count complete diagonals as terminal states
 bool DISABLE_DIAG=false;
-int READ_EQUIV=0, WRITE_EQUIV=0;
-int INTERACTIVE=0;
+int READ_EQUIV=5, WRITE_EQUIV=5;
+int INTERACTIVE=1;
 inline state_type get_hash(state_type s2) {    return XXH64((char *) &s2, sizeof(state_type), 0); }
+
+// struct hashstate_type
+// {
+//     size_t operator()(const state_type& s2) const {
+//         return XXH64((char *) &s2, sizeof(state_type), 0);
+//     }
+// };
+
 
 // print a state in a more readable way
 //
@@ -31,10 +56,11 @@ string state_to_string(state_type state)
 {
   string r;
     string s= bitset<64>(state).to_string('.','X').substr(64-BOARD_COLS*BOARD_ROWS);
-    for(uint i=0; i<BOARD_ROWS; i++)
-      r += s.substr(i * BOARD_COLS, BOARD_COLS) + "\n";
+    // for(uint i=0; i<BOARD_ROWS; i++)
+    //   r += s.substr(i * BOARD_COLS, BOARD_COLS) + "\n";
 
-    return r;
+    // return r;
+	return s;
 }
 
 // see if a row, column, or diagonal is completed
@@ -89,11 +115,11 @@ state_type *ch_hybrid;
 state_type *bitvalue_hash;
 void bitcache_init(state_type count)
 {
-  cerr << "initializing cache..." << endl;
+  // cerr << "initializing cache..." << endl;
   //    bitcomputed_hash = (char *) memset(new char[count/8+1], 0, count/8+1);
   if(ALGO==HYBRID)
     {
-      cerr << "caches have size " << sizeof(state_type) * (count/4/8/(state_type)pow(2,TOP_BITS)+1) << " bytes, " << (state_type)pow(2, HYBRID_BITS) * sizeof(state_type) << " bytes" << endl;
+      // cerr << "caches have size " << sizeof(state_type) * (count/4/8/(state_type)pow(2,TOP_BITS)+1) << " bytes, " << (state_type)pow(2, HYBRID_BITS) * sizeof(state_type) << " bytes" << endl;
       bitvalue_hash = (state_type *) memset(new state_type[count/4/8/(state_type)pow(2,TOP_BITS)+1], 0, (count/4/8/pow(2,TOP_BITS)+1) * sizeof(state_type));
       TOP_BITS_MASK = state_type(pow(2, TOP_BITS)-1);
       NOTOPBITS_MASK = (~((TOP_BITS_MASK) << (BOARD_SIZE-TOP_BITS))) & (MAX_BIT-1);
@@ -104,8 +130,8 @@ void bitcache_init(state_type count)
       ch_hybrid[0] = -1;
     }
   else
-    bitvalue_hash = (state_type *) memset(new state_type[count/4/8+1], 0, (count/4/8+1) * sizeof(state_type));
-   cerr << "done" << endl;
+    bitvalue_hash = (state_type *) memset(new state_type[count/4/8+1], 1, (count/4/8+1) * sizeof(state_type));
+   //cerr << "done" << endl;
  }
 
  //inline uint8_t ht_bitpattern(state_type state)  { return uint8_t(1) << (uint8_t(state) & uint8_t(7)); }
@@ -158,51 +184,51 @@ void bitcache_init(state_type count)
  //
  state_type get_equiv_state(state_type state, int type)
  {
-   state_type s2 = 0, state2=state;
+  state_type s2 = 0, state2=state;
 
-   switch(type) 
-     {
-     case 0:
-       return state;
-     case 1: // 180 deg rotation
-       return bit_reverse(state, BOARD_SIZE);
-     case 2: // vert flip
-       for(int i=0; i<BOARD_ROWS; i++)
-	 {
-	   s2 = (s2 << BOARD_COLS) | (state2 & WIN_MASK_HORIZ);
-	   state2 >>= BOARD_COLS;
-	 }
-       return s2;
-     case 3: // horiz flip
-       for(int i=0; i<BOARD_COLS; i++)
-	 {
-	   s2 = (s2 << 1) | (state2 & WIN_MASK_VERT);
-	   state2 >>= 1;
-	 }
-       return s2;
-     case 4: // transpose and 90 deg
-     case 5:
-       for(int i=0; i<BOARD_ROWS; i++)
-	 {
-	   state_type s3=0;
-	   state_type row = state2 & WIN_MASK_HORIZ;
+  switch(type) 
+  {
+    case 0:
+      return state;
+    case 1: // 180 deg rotation
+      return bit_reverse(state, BOARD_SIZE);
+    case 2: // vert flip
+      for(int i=0; i<BOARD_ROWS; i++)
+      {
+        s2 = (s2 << BOARD_COLS) | (state2 & WIN_MASK_HORIZ);
+        state2 >>= BOARD_COLS;
+      }
+      return s2;
+    case 3: // horiz flip
+      for(int i=0; i<BOARD_COLS; i++)
+      {
+        s2 = (s2 << 1) | (state2 & WIN_MASK_VERT);
+        state2 >>= 1;
+      }
+      return s2;
+    case 4: // transpose and 90 deg
+    case 5:
+      for(int i=0; i<BOARD_ROWS; i++)
+      {
+        state_type s3=0;
+        state_type row = state2 & WIN_MASK_HORIZ;
 
-	   state2 >>= BOARD_COLS;
-	   row = bit_reverse8(row, BOARD_COLS);
+        state2 >>= BOARD_COLS;
+        row = bit_reverse8(row, BOARD_COLS);
 
-	   for(int j=0; j<BOARD_COLS; j++)
-	     {
-	       s3 = (s3 << BOARD_COLS) | (row & 1);
-	       row >>= 1;
-	     }
+        for(int j=0; j<BOARD_COLS; j++)
+        {
+          s3 = (s3 << BOARD_COLS) | (row & 1);
+          row >>= 1;
+        }
 
-	   s2 = (type == 4) ? (s2 | (s3 << i)) : ((s2 << 1) | s3);
-	 }
+        s2 = (type == 4) ? (s2 | (s3 << i)) : ((s2 << 1) | s3);
+      }
 
-       return s2;
-     }
-   return state;
- }
+    return s2;
+  }
+  return state;
+}
 
  void cache_init(state_type count, int levels=1)
  {
@@ -229,14 +255,14 @@ state_type r_hybrid=0, w_hybrid=0, r_bit=0, w_bit=0;
 
 void print_status()
 {
-  for(int i=0; i<pow(2,TOP_BITS); i++)
-    if(ct[i] > 0)
-      cout << i << " " << std::bitset<15>(i) << " " << ct[i] << endl;
+//   for(int i=0; i<pow(2,TOP_BITS); i++)
+//     if(ct[i] > 0)
+//       cout << i << " " << std::bitset<15>(i) << " " << ct[i] << endl;
   
 
-  cout << "----- Total states written: " << ct2 << "  " << (double(ct2) / pow(2.0, BOARD_SIZE))*100 << "%" << endl;
-  cout << "Bit cache    reads: " << r_bit << "  writes: " << w_bit << endl;
-  cout << "Hybird cache reads: " << r_hybrid << "  writes: " << w_hybrid << endl;
+//   cout << "----- Total states written: " << ct2 << "  " << (double(ct2) / pow(2.0, BOARD_SIZE))*100 << "%" << endl;
+//   cout << "Bit cache    reads: " << r_bit << "  writes: " << w_bit << endl;
+//   cout << "Hybird cache reads: " << r_hybrid << "  writes: " << w_hybrid << endl;
   
 }
 
@@ -348,138 +374,244 @@ state_type binom(state_type n, state_type k)
 }
 
 
-int main(int argc, char *argv[])
-{
-    try
-    {
-        if(argc < 3)
-	  throw string("usage: ./notaktoe [options] board_rows board_cols \n"
-		       "  --algo n:    0 = cache all states in bitvectors, requires O(2^(board_rows*board_cols)) *bits* of RAM, but fast\n"
-		       "               1 = cache states in hash tables, requires O(board_rows*board_cols*n) \n"
-		       "                   (where n is huge number specified at compile time) but not fast\n"
-		       "               2 = incrementally consider states from bottom up, uses about \n"
-		       "                  ((board_rows*board_cols) choose ((board_rows*board_cols/2)))*(board_rows*board_cols/2) 64-bit *words* of storage\n"
-		       "                  but doesn't need to be in ram (current implementation is in ram but could be done on disk instead\n"
-		       "  --nodiag:    ignore diagonal wins \n"
-		       "  --readeq n:  when looking up states, look also for up to n equivalent states (rotations, flips, etc)\n"
-		       "  --writeeq n: after calculating for new state, update cache for up to n equivalent states (rotations, flips, etc)\n"
-		       "  --interact:  interactive mode \n"
-		       );
-	int ii=1;
-	for( ; ii<argc; ii++)
-	  if(string(argv[ii]) == "--algo") ALGO = (Algos) atoi(argv[++ii]);
-	  else if(string(argv[ii]) == "--nodiag") DISABLE_DIAG = true;
-	  else if(string(argv[ii]) == "--readeq") READ_EQUIV = atoi(argv[++ii]);
-	  else if(string(argv[ii]) == "--writeeq") WRITE_EQUIV = atoi(argv[++ii]);
-	  else if(string(argv[ii]) == "--interact") INTERACTIVE = 1;
-	  else break;
+// int main(int argc, char *argv[])
+// {
+//     try
+//     {
+//         if(argc < 3)
+// 	  throw string("usage: ./notaktoe [options] board_rows board_cols \n"
+// 		       "  --algo n:    0 = cache all states in bitvectors, requires O(2^(board_rows*board_cols)) *bits* of RAM, but fast\n"
+// 		       "               1 = cache states in hash tables, requires O(board_rows*board_cols*n) \n"
+// 		       "                   (where n is huge number specified at compile time) but not fast\n"
+// 		       "               2 = incrementally consider states from bottom up, uses about \n"
+// 		       "                  ((board_rows*board_cols) choose ((board_rows*board_cols/2)))*(board_rows*board_cols/2) 64-bit *words* of storage\n"
+// 		       "                  but doesn't need to be in ram (current implementation is in ram but could be done on disk instead\n"
+// 		       "  --nodiag:    ignore diagonal wins \n"
+// 		       "  --readeq n:  when looking up states, look also for up to n equivalent states (rotations, flips, etc)\n"
+// 		       "  --writeeq n: after calculating for new state, update cache for up to n equivalent states (rotations, flips, etc)\n"
+// 		       "  --interact:  interactive mode \n"
+// 		       );
+// 	int ii=1;
+// 	for( ; ii<argc; ii++)
+// 	  if(string(argv[ii]) == "--algo") ALGO = (Algos) atoi(argv[++ii]);
+// 	  else if(string(argv[ii]) == "--nodiag") DISABLE_DIAG = true;
+// 	  else if(string(argv[ii]) == "--readeq") READ_EQUIV = atoi(argv[++ii]);
+// 	  else if(string(argv[ii]) == "--writeeq") WRITE_EQUIV = atoi(argv[++ii]);
+// 	  else if(string(argv[ii]) == "--interact") INTERACTIVE = 1;
+// 	  else break;
 
-	BOARD_ROWS = atoi(argv[ii]);
-        BOARD_COLS = atoi(argv[ii+1]);
-	BOARD_SIZE = BOARD_ROWS * BOARD_COLS;
-	MAX_BIT = pow(2, BOARD_SIZE);
-	if(ALGO <0 || ALGO > 4)
-	  throw string("invalid algo " + ALGO);
+// 	BOARD_ROWS = atoi(argv[ii]);
+//         BOARD_COLS = atoi(argv[ii+1]);
+// 	BOARD_SIZE = BOARD_ROWS * BOARD_COLS;
+// 	MAX_BIT = pow(2, BOARD_SIZE);
+// 	if(ALGO <0 || ALGO > 4)
+// 	  throw string("invalid algo " + ALGO);
 
-	init_check_win();
+// 	init_check_win();
 
-	if(ALGO == BOTTOMUP)
-	  {
-	    // start with full board
-	    vector< state_type > states, new_states;
-	    states.push_back((state_type(MAX_BIT-1) << 1) | 1);
+// 	if(ALGO == BOTTOMUP)
+// 	  {
+// 	    // start with full board
+// 	    vector< state_type > states, new_states;
+// 	    states.push_back((state_type(MAX_BIT-1) << 1) | 1);
 	    
-	    // remove one piece at a time
-	    for(int ii=BOARD_ROWS*BOARD_COLS; ii>0; ii--)
-	      {
-		cerr << "LEVEL " << ii << endl;
-		cerr << "listing..." << endl;
-		new_states.clear();
-		new_states.reserve(states.size()*ii);
-		for(int j=0; j<states.size(); j++)
-		  {
-		    state_type state = states[j] >> 1;
-		    bool state_won = states[j] & 1;
+// 	    // remove one piece at a time
+// 	    for(int ii=BOARD_ROWS*BOARD_COLS; ii>0; ii--)
+// 	      {
+// 		cerr << "LEVEL " << ii << endl;
+// 		cerr << "listing..." << endl;
+// 		new_states.clear();
+// 		new_states.reserve(states.size()*ii);
+// 		for(int j=0; j<states.size(); j++)
+// 		  {
+// 		    state_type state = states[j] >> 1;
+// 		    bool state_won = states[j] & 1;
 		    
-		    for(int i=0; i<BOARD_ROWS*BOARD_COLS; i++)
-		      if(state & (1 << i))
-			new_states.push_back(( (state ^ (1 << i)) << 1) | (!state_won));
-		  }
+// 		    for(int i=0; i<BOARD_ROWS*BOARD_COLS; i++)
+// 		      if(state & (1 << i))
+// 			new_states.push_back(( (state ^ (1 << i)) << 1) | (!state_won));
+// 		  }
 		
-		states.clear();
-		states.reserve(binom(BOARD_ROWS*BOARD_COLS, ii-1));
-		cerr << "sorting... " << new_states.size() << endl;
-		__gnu_parallel::sort(new_states.begin(), new_states.end());
-		cerr << "uniq'ing..." << endl;
-		state_type last = -1;
-		for(int i=0; i<new_states.size(); )
-		  {
-		    last = new_states[i] >> 1;
-		    int new_i=i;
-		    bool any=false;
-		    while(last == (new_states[new_i] >> 1) && new_i < new_states.size())
-		      {
-			any =  any || (new_states[new_i] & 1);
-			new_i++;
-		      }
-		    states.push_back(( last << 1) | ( any || check_win(last)));
+// 		states.clear();
+// 		states.reserve(binom(BOARD_ROWS*BOARD_COLS, ii-1));
+// 		cerr << "sorting... " << new_states.size() << endl;
+// 		__gnu_parallel::sort(new_states.begin(), new_states.end());
+// 		cerr << "uniq'ing..." << endl;
+// 		state_type last = -1;
+// 		for(int i=0; i<new_states.size(); )
+// 		  {
+// 		    last = new_states[i] >> 1;
+// 		    int new_i=i;
+// 		    bool any=false;
+// 		    while(last == (new_states[new_i] >> 1) && new_i < new_states.size())
+// 		      {
+// 			any =  any || (new_states[new_i] & 1);
+// 			new_i++;
+// 		      }
+// 		    states.push_back(( last << 1) | ( any || check_win(last)));
 
-		    i = new_i;
-		  }
+// 		    i = new_i;
+// 		  }
 		
-		cerr << states.size() << " " << (states[0] & 1) << endl;
+// 		cerr << states.size() << " " << (states[0] & 1) << endl;
 
 
-		for(int i=0; i<states.size(); i++)
-		  cout << (states[i] >> 1) << " " << (states[i] & 1) << endl;
+// 		for(int i=0; i<states.size(); i++)
+// 		  cout << (states[i] >> 1) << " " << (states[i] & 1) << endl;
 		
-	      }
+// 	      }
 	    
-	    return 0;
-	  }
+// 	    return 0;
+// 	  }
 	
-	if(ALGO == BITCACHE || ALGO == HYBRID)
-	  bitcache_init(MAX_BIT);
-	else if(ALGO == HASHCACHE)
-	  cache_init(pow(2,BOARD_ROWS*BOARD_COLS), BOARD_ROWS*BOARD_COLS);
+// 	if(ALGO == BITCACHE || ALGO == HYBRID)
+// 	  bitcache_init(MAX_BIT);
+// 	else if(ALGO == HASHCACHE)
+// 	  cache_init(pow(2,BOARD_ROWS*BOARD_COLS), BOARD_ROWS*BOARD_COLS);
 
-	ct=vector<state_type>(pow(2,TOP_BITS));
+// 	ct=vector<state_type>(pow(2,TOP_BITS));
 	
-        cout << "Player 1 " << (p1(0000,1) ? "can" : "cannot") << " force a win." << endl;
+//         // cout << "Player 1 " << (p1(0000,1) ? "can" : "cannot") << " force a win." << endl;
 	
 	
 
-	/*	vector<state_type> ct(16);
-	for(state_type i=0; i<MAX_BIT/32; i++)
-	  {
-	    bool f = true;
-	    for(state_type j=0; j<32; j++)
-	      {
-		//		cout << (i >> (BOARD_SIZE-4)) << endl;
-		ct[(i*32) >> (BOARD_SIZE-4)] += ((bitvalue_hash[i] >> (j*2)) & 1);
-		//		cout << (((bitvalue_hash[i] >> (j*2)) & 1)?"X":"_");
-		//		if((bitvalue_hash[i] >> (j*2)) & 1)
-		//		  f = false;
-	      }
-	    //	    cout << endl;
-	    //    if(!f) ct2+=4;
-	  }
-	*/
-	print_status();
+// 	/*	vector<state_type> ct(16);
+// 	for(state_type i=0; i<MAX_BIT/32; i++)
+// 	  {
+// 	    bool f = true;
+// 	    for(state_type j=0; j<32; j++)
+// 	      {
+// 		//		cout << (i >> (BOARD_SIZE-4)) << endl;
+// 		ct[(i*32) >> (BOARD_SIZE-4)] += ((bitvalue_hash[i] >> (j*2)) & 1);
+// 		//		cout << (((bitvalue_hash[i] >> (j*2)) & 1)?"X":"_");
+// 		//		if((bitvalue_hash[i] >> (j*2)) & 1)
+// 		//		  f = false;
+// 	      }
+// 	    //	    cout << endl;
+// 	    //    if(!f) ct2+=4;
+// 	  }
+// 	*/
+// 	print_status();
 
-	if(INTERACTIVE)
-	  {
-	    state_type state=0, new_state=0;
+// 	if(INTERACTIVE)
+// 	  {
+// 	    state_type state=0, new_state=0;
 
-	    int p=0;
-	    while(1) 
-	      {
-		cout << "------" << endl;
-		cout << "CURRENT BOARD:" << endl;
-		cout << state_to_string(state) << endl;
+// 	    int p=0;
+// 	    while(1) 
+// 	      {
+// 		// cout << "------" << endl;
+// 		// cout << "CURRENT BOARD:" << endl;
+// 		cout << state_to_string(state) << endl;
+// 		//cout << state << endl;
 
-		char status[BOARD_SIZE];
-		for(int i=0; i<BOARD_SIZE; i++)
+// 		char status[BOARD_SIZE];
+// 		for(int i=0; i<BOARD_SIZE; i++)
+// 		  {
+// 		  if(state & (1 << i))
+// 		    status[i] = 'X';
+// 		  else if(check_win(state | (1 << i)))
+// 		    status[i] = '!';
+// 		  else if(!cache_get_val(state | (1 << i), 0))
+// 		    status[i] = 'w';
+// 		  else 
+// 		    status[i] = '.';
+// 		  }
+
+// 		//cout << "Here's what would happen if current player chooses each square:\n";
+// 		//cout << "X = square already occupied, ! = immediate loss, w = current player can force win, . = current player cannot force win\n";
+// 		reverseChar(status);
+// 		cout<< status << endl;
+// 		// for(uint i=0, n=BOARD_SIZE-1; i<BOARD_ROWS; i++)
+// 		//   {
+// 		//   for(uint j=0; j<BOARD_COLS; j++, n--)
+// 		//     cout << status[n];
+// 		//   cout << endl;
+// 		//   }
+
+// 		int row,col;
+// 		//cout << "Player " << p+1 << ", ";
+// 		//cout << "where to play? (give row col pair, e.g. '0 0' for upper-left): " << endl;
+// 		cin >> row >> col;
+// 		row = BOARD_ROWS-row-1;
+// 		col = BOARD_COLS-col-1;
+// 		new_state |= (1 << (row*BOARD_ROWS+col));
+
+// 		if(new_state != state)
+// 		  p=(++p)%2;
+// 		state = new_state;
+// 	      }
+
+// 	  }
+
+
+
+//         return 0;
+//     }
+
+//     catch(string err)
+//     {
+//         cerr << err << endl;
+//     }
+//     catch (std::exception const err)
+//     {
+//         cerr << err.what() << endl;
+//     }
+// }
+
+// reverse char
+void reverseChar(char* str) {
+    std::reverse(str, str + strlen(str));
+}
+
+// print vector
+
+
+
+// struct Node 
+// { 
+//     int key; 
+//     vector<Node *>child;
+//     struct Node *parent; 
+// }; 
+
+
+// struct Node *newNode(int item, struct Node* node) 
+// { 
+//     struct Node *temp =  new Node; 
+//     temp->key = item; 
+//     temp->parent = node; 
+//     return temp; 
+// } 
+
+// print vector
+// void printv(unordered_set<state_type> v)
+// {
+// 	unordered_set<state_type>::iterator itr; 
+//   for (itr = v.begin(); itr != v.end(); itr++) 
+//       cout << (*itr) << "this"<< endl;
+// }
+
+void printm(std::map<string,string> input)
+{
+	for (std::map<string,string>::iterator it=input.begin(); it!=input.end(); ++it)
+  {
+    std::cout << it->first << " => " << it->second << '\n';
+	}
+}
+
+char *winning_path(state_type state)
+{
+  // need change this number according to the size
+  // not familiar with c so I don't know how to set static 
+  // static char status[25];
+  // static char status[9];
+  static char status[36];
+
+  // static char* status;
+  // status = (char*)malloc(BOARD_SIZE * sizeof(char));
+		
+		for(int i=0; i<BOARD_SIZE; ++i)
 		  {
 		  if(state & (1 << i))
 		    status[i] = 'X';
@@ -490,42 +622,358 @@ int main(int argc, char *argv[])
 		  else 
 		    status[i] = '.';
 		  }
+		reverseChar(status);
+		// cout<<status << endl;
+    return status;
+}
 
-		cout << "Here's what would happen if current player chooses each square:\n";
-		cout << "X = square already occupied, ! = immediate loss, w = current player can force win, . = current player cannot force win\n";
-		for(uint i=0, n=BOARD_SIZE-1; i<BOARD_ROWS; i++)
-		  {
-		  for(uint j=0; j<BOARD_COLS; j++, n--)
-		    cout << status[n];
-		  cout << endl;
-		  }
+string convert_binary(string s){
+  int n = s.length();
+  string bin;
+  for (int i = 0; i < n; i++)
+  {
+    
+    if (s[i] == 'w')
+      bin.push_back('1');
+    else
+      bin.push_back('0');
+  }
+  return bin;
+}
 
-		int row,col;
-		cout << "Player " << p+1 << ", ";
-		cout << "where to play? (give row col pair, e.g. '0 0' for upper-left): " << endl;
-		cin >> row >> col;
-		row = BOARD_ROWS-row-1;
-		col = BOARD_COLS-col-1;
-		new_state |= (1 << (row*BOARD_ROWS+col));
+string convert_binary_2(string s){
+  int n = s.length();
+  string bin;
+  for (int i = 0; i < n; i++)
+  {
+    
+    if (s[i] == '.')
+      bin.push_back('1');
+    else
+      bin.push_back('0');
+  }
+  return bin;
+}
 
-		if(new_state != state)
-		  p=(++p)%2;
-		state = new_state;
-	      }
+// bool if_visited(unordered_set<state_type, state_type_hash> v, state_type x)
+// {
+//   state_type s, s2;
+//   std::unordered_set<state_type, state_type_hash>::const_iterator got;
+//   for (int i=0; i<=5; ++i)
+//   {
+//     s = get_equiv_state(x, i);
+//     got = v.find(s);
+    
+//     if ( got != v.end() )
+//     {
+//       //cout << "find x " << state_to_string(s) << endl;
+//       return true;
+//     } 
+//   }
+//   s2 = get_equiv_state(s, 3);
+//   got = v.find(s2);
+//   if ( got != v.end() )
+//   {
+//     // cout << "find x " << state_to_string(s2) << endl;
+//     return true;
+//   } 
+//   s2 = get_equiv_state(s2, 2);
+//   got = v.find(s2);
+//   if ( got != v.end() )
+//   {
+//     // cout << "find x " << state_to_string(s2) << endl;
+//     return true;
+//   } 
+//   return false;
+  
+// }
 
-	  }
 
-
-
-        return 0;
-    }
-
-    catch(string err)
+bool if_visited(vector<state_type> v, state_type x)
+{
+  state_type s, s2;
+  for (int i=0; i<=5; ++i)
+  {
+    s = get_equiv_state(x, i);
+    
+    if (std::count(v.begin(), v.end(), s))
     {
-        cerr << err << endl;
-    }
-    catch (std::exception const err)
+      //cout << "find x " << state_to_string(s) << endl;
+      return true;
+    } 
+  }
+  s2 = get_equiv_state(s, 3);
+  if (std::count(v.begin(), v.end(), s2))
+  {
+    // cout << "find x " << state_to_string(s2) << endl;
+    return true;
+  } 
+  s2 = get_equiv_state(s2, 2);
+  if (std::count(v.begin(), v.end(), s2))
+  {
+    // cout << "find x " << state_to_string(s2) << endl;
+    return true;
+  } 
+  return false;
+  
+}
+int main(int argc, char *argv[])
+{
+  std::ofstream outfile;
+  string filename;
+  cout << "save file name? (*.txt)"<<endl;
+  cin >> filename;
+  outfile.open(filename, std::ios_base::app); // append instead of overwrite
+  clock_t start, end;
+  double cpu_time_used;
+  
+  int pre_piece_n = 0, cur_piece_n = 0;
+  start = clock();
+  // try
+  // {
+
+  BOARD_ROWS = atoi(argv[1]);
+  BOARD_COLS = atoi(argv[2]);
+  BOARD_SIZE = BOARD_ROWS * BOARD_COLS;
+  MAX_BIT = pow(2, BOARD_SIZE);
+
+
+  init_check_win();
+
+  // not sure why removing this will create leading symbols in status[]
+  // vector<state_type> states;
+  // states.push_back((state_type(MAX_BIT-1) << 1) | 1);
+  // __gnu_parallel::sort(states.begin(), states.end());
+    
+      
+  bitcache_init(MAX_BIT);
+
+
+  ct=vector<state_type>(pow(2,TOP_BITS));
+  // cout << "Player 1 " << (p1(0000,1) ? "can" : "cannot") << " force a win." << endl;
+
+  print_status();
+
+
+  state_type state=0, new_state=0;
+  // queue of current state, parent node, current player
+  // queue< tuple<state_type, struct Node*, int> > q; 
+  queue< tuple<state_type, int> > q; 
+  // visited
+  vector< state_type > V; 
+  //std::unordered_set<state_type, state_type_hash> V;
+  // float z = V.max_load_factor();
+  // V.max_load_factor ( z / 10.0 );
+  
+  
+  // std::map<string, string> state_map;
+  
+  int p=0;
+
+  // struct Node* root = newNode(-1,NULL);
+
+  
+  // cout << state_to_string(state) << endl;
+
+  static char *status;
+  status = winning_path(state);
+  //cout<<status << endl;
+  string binary_status = convert_binary(status);
+  //cout<< binary_status << endl;
+  
+
+  // state_map[state_to_string(state)]=binary_status;
+  outfile << state_to_string(state)  // string (key)
+              << ':' 
+              << binary_status // string's value 
+              << std::endl;
+  //V.insert(state);
+  V.push_back(state);
+  
+  //xcout<< state_to_string(state) << endl;
+  //printm(state_map);
+
+  
+  
+  for(int i=0; i<BOARD_SIZE; ++i)
+  {
+    if (status[i] == 'w')
     {
-        cerr << err.what() << endl;
+      new_state = 0;
+      // tuple<state_type, struct Node*, int> queue_tuple;
+      // struct Node* newnode = newNode(i,root);
+      // root->child.push_back(newnode);
+      // // struct Node* newnode_copy = newNode(i,root_copy);
+      // // root_copy->child.push_back(newnode_copy);
+      // new_state |= (1 << (BOARD_SIZE - i - 1));
+      // queue_tuple = make_tuple (new_state,newnode, 1);
+      // // std::cout << state_to_string(new_state) << endl;
+      // q.push(queue_tuple);
+      tuple<state_type, int> queue_tuple;
+      new_state |= (1 << (BOARD_SIZE - i - 1));
+      queue_tuple = make_tuple (new_state, 1);
+      q.push(queue_tuple);
+      
     }
+  }
+
+  int it = 0;
+  while (!q.empty())
+  {
+    it++;
+    // if (it%100000 == 0) 
+    //   outfile.flush(); 
+    //cout << "--------------------------------------------"<< it << "------------------------------------------"<<endl;
+    //cout<< q.size()<<endl;
+    if (it %100000 == 0)
+      cout<< it << endl;
+    state = std::get<0>(q.front());
+    string state_str = state_to_string(state);
+    cur_piece_n = count(state_str.begin(), state_str.end(), 'X');
+    if (cur_piece_n > pre_piece_n)
+      V.clear();
+    pre_piece_n = cur_piece_n;
+    //cout << state_to_string (state) << endl;
+    // if visited
+
+
+    if (if_visited(V, state))
+    {
+      //cout<< "visited"<<endl;
+      //cout << state_to_string (state) << endl;
+      q.pop();
+      continue;
+    }
+    status = winning_path(state);
+    // struct Node* parent_node = std::get<1>(q.front());
+    int p = std::get<1>(q.front());
+    q.pop();
+    // std::cout << status << endl;
+    // std::cout <<parent_node->key << endl;
+    // std::cout << p << endl;
+
+    // first player
+    if (p==0)
+    {
+      string binary_status = convert_binary(status);
+    //cout<< binary_status << endl;
+  
+
+      // state_map[state_to_string(state)]=binary_status;
+      outfile << state_to_string(state)  // string (key)
+            << ':' 
+            << binary_status // string's value 
+            << std::endl;
+      //V.insert(state);
+      V.push_back(state);
+      
+
+      //xcout<< state_to_string(state) << endl;
+      //printm(state_map);
+      // std::cout << status << endl;
+      for(int i=0; i<BOARD_SIZE; ++i)
+      {
+        if (status[i] == 'w')
+        {
+          new_state = state;
+          // struct Node* newnode = newNode(i,parent_node);
+          // parent_node->child.push_back(newnode);
+          // tuple<state_type, struct Node*, int> queue_tuple;
+          // new_state |= (1 << (BOARD_SIZE - i - 1));
+          // queue_tuple = make_tuple (new_state,newnode, 1-p);
+          // //std::cout << state_to_string(new_state) << endl;
+          // q.push(queue_tuple);
+          tuple<state_type, int> queue_tuple;
+          new_state |= (1 << (BOARD_SIZE - i - 1));
+          queue_tuple = make_tuple (new_state, 1-p);
+          q.push(queue_tuple);
+          
+          
+        }
+      }
+      // p=(++p)%2;
+      // cout << "pppppppppppppppppppppp"<< p << "pppppppppppppppppppppp"<<endl;
+    }
+    // second player
+    else if (p==1)
+    {
+      string binary_status = convert_binary_2(status);
+    //cout<< binary_status << endl;
+  
+
+      // state_map[state_to_string(state)]=binary_status;
+      outfile << state_to_string(state)  // string (key)
+              << ':' 
+              << binary_status // string's value 
+              << std::endl;
+      //V.insert(state);
+      V.push_back(state);
+      //xcout<< state_to_string(state) << endl;
+      //printm(state_map);
+      for(int i=0; i<BOARD_SIZE; ++i)
+      {
+        if (status[i] == '.')
+        {
+          new_state = state;
+          // struct Node* newnode = newNode(i,parent_node);
+          // parent_node->child.push_back(newnode);
+          // tuple<state_type, struct Node*, int> queue_tuple;
+          // new_state |= (1 << (BOARD_SIZE - i - 1));
+          // queue_tuple = make_tuple (new_state,newnode, 1-p);
+          // //std::cout << state_to_string(new_state) << endl;
+          // q.push(queue_tuple);
+          tuple<state_type, int> queue_tuple;
+          new_state |= (1 << (BOARD_SIZE - i - 1));
+          queue_tuple = make_tuple (new_state, 1-p);
+          q.push(queue_tuple);
+          
+        }
+      }
+      // p=(++p)%2;
+      // cout << "pppppppppppppppppppppp"<< p << "pppppppppppppppppppppp" <<endl;
+    }
+
+  
+  }
+  end = clock();
+  cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
+  cout << "end" << endl;
+  printf("fun() took %f seconds to execute \n", cpu_time_used); 
+  
+
+
+  // for (auto const& x : state_map)
+  // {
+  //   outfile << x.first  // string (key)
+  //             << ':' 
+  //             << x.second // string's value 
+  //             << std::endl ;
+  // }
+  return 0;
+  // printv(root->child);
+  // while (!q.empty())
+  // {
+  //   std::cout << state_to_string(q.front()) << endl;
+  //   q.pop();
+  // }
+
+  // int move;
+  // cin >> move;
+
+  // new_state |= (1 << (BOARD_SIZE - move - 1));
+
+  // if(new_state != state)
+  //   p=(++p)%2;
+  // state = new_state;
+  // }
+
+
+    // catch(string err)
+    // {
+    //     cerr << err << endl;
+    // }
+    // catch (std::exception const err)
+    // {
+    //     cerr << err.what() << endl;
+    // }
 }
