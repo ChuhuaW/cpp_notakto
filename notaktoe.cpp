@@ -212,6 +212,31 @@ void bitcache_init(state_type count)
    return state;
  }
 
+ int get_equiv_move(int position, int type, int BOARD_ROWS, int BOARD_COLS)
+ {
+   int x = position/BOARD_ROWS;
+   int y = position % BOARD_COLS;
+   switch(type) 
+     {
+     case 0:
+       return position;
+     case 1: // 180 deg rotation
+       return (BOARD_ROWS-1-x)*BOARD_ROWS + (BOARD_COLS-1-y);
+     case 2: // horiz flip
+       return (BOARD_ROWS-1-x)*BOARD_ROWS + y;
+     case 3: // vert flip
+       return x*BOARD_ROWS + (BOARD_COLS-1-y);
+     case 4: // transpose and 90 deg
+       return y*BOARD_ROWS + x;
+     case 5:
+       return y*BOARD_ROWS + (BOARD_COLS-1-x);
+     case 6:
+       return (BOARD_ROWS-1-y)*BOARD_ROWS + x;
+     case 7:
+       return (BOARD_ROWS-1-y)*BOARD_ROWS + (BOARD_COLS-1-x);
+     }
+ }
+
  void cache_init(state_type count, int levels=1)
  {
    cerr << "initializing " << endl;
@@ -372,14 +397,8 @@ void printm(std::map<string,string> input)
 
 char *winning_path(state_type state)
 {
-  // need change this number according to the size
-  // not familiar with c so I don't know how to set static 
   // static char status[25];
-  static char status[36];
-  // static char status[36];
-
-  // static char* status;
-  // status = (char*)malloc(BOARD_SIZE * sizeof(char));
+  static char status[25];
 		
 		for(int i=0; i<BOARD_SIZE; ++i)
 		  {
@@ -398,6 +417,7 @@ char *winning_path(state_type state)
 }
 
 string convert_binary(string s){
+  //convert state to binary string
   int n = s.length();
   string bin;
   for (int i = 0; i < n; i++)
@@ -409,49 +429,48 @@ string convert_binary(string s){
       bin.push_back('0');
   }
   return bin;
-}
-
-string convert_binary_2(string s){
-  int n = s.length();
-  string bin;
-  for (int i = 0; i < n; i++)
-  {
     
-    if (s[i] == 'w')
-      bin.push_back('1');
-    else
-      bin.push_back('0');
-  }
-  return bin;
 }
 
 
 
-bool if_visited(vector<state_type> v, state_type x)
+bool if_visited(vector< tuple<state_type, int> > v, state_type x, int last)
 {
   state_type s, s2;
+  int pos;
   for (int i=0; i<=5; ++i)
   {
     s = get_equiv_state(x, i);
-    //cout << "find x "<< i << " "<< state_to_string(s) << endl;
-    if (std::count(v.begin(), v.end(), s))
+    pos = get_equiv_move(last, i, BOARD_ROWS, BOARD_COLS);
+    tuple<state_type, int> s_tuple;
+    s_tuple = make_tuple (s, pos);
+    // cout << "find x "<< i << " "<< state_to_string(s) << endl;
+    if (std::count(v.begin(), v.end(), s_tuple))
     {
-      
+      // cout << "find x " << state_to_string(s) << endl;
+      // cout << "last " << pos << endl;
       return true;
     } 
   }
   s2 = get_equiv_state(s, 1);
-  //cout << "find x "<< 6 << " "<< state_to_string(s2) << endl;
-  if (std::count(v.begin(), v.end(), s2))
+  pos = get_equiv_move(last, 6, BOARD_ROWS, BOARD_COLS);
+  tuple<state_type, int> s_tuple;
+  s_tuple = make_tuple (s2, pos);
+  // cout << "find x "<< 6 << " "<< state_to_string(s2) << endl;
+  if (std::count(v.begin(), v.end(), s_tuple))
   {
     // cout << "find x " << state_to_string(s2) << endl;
+    // cout << "last " << pos << endl;
     return true;
   } 
   s2 = get_equiv_state(s2, 3);
-  //cout << "find x "<< 7 << " "<< state_to_string(s2) << endl;
-  if (std::count(v.begin(), v.end(), s2))
+  pos = get_equiv_move(last, 7, BOARD_ROWS, BOARD_COLS);
+  s_tuple = make_tuple (s2, pos);
+  // cout << "find x "<< 7 << " "<< state_to_string(s2) << endl;
+  if (std::count(v.begin(), v.end(), s_tuple))
   {
     // cout << "find x " << state_to_string(s2) << endl;
+    // cout << "last " << pos << endl;
     return true;
   } 
   return false;
@@ -469,8 +488,6 @@ int main(int argc, char *argv[])
   
   int pre_piece_n = 0, cur_piece_n = 0;
   start = clock();
-  // try
-  // {
 
   BOARD_ROWS = atoi(argv[1]);
   BOARD_COLS = atoi(argv[2]);
@@ -479,60 +496,34 @@ int main(int argc, char *argv[])
 
 
   init_check_win();
-
-  // not sure why removing this will create leading symbols in status[]
-  // vector<state_type> states;
-  // states.push_back((state_type(MAX_BIT-1) << 1) | 1);
-  // __gnu_parallel::sort(states.begin(), states.end());
-    
-      
   bitcache_init(MAX_BIT);
-
-  // cache_init(pow(2,BOARD_ROWS*BOARD_COLS), BOARD_ROWS*BOARD_COLS);
-
   ct=vector<state_type>(pow(2,TOP_BITS));
-  // cout << "Player 1 " << (p1(0000,1) ? "can" : "cannot") << " force a win." << endl;
 
   print_status();
 
 
   state_type state=0, new_state=0;
   // queue of current state, parent node, current player
-  // queue< tuple<state_type, struct Node*, int> > q; 
-  queue< tuple<state_type, int> > q; 
+  queue< tuple<state_type, int, int> > q; 
   // visited
-  vector< state_type > V; 
-  //std::unordered_set<state_type, state_type_hash> V;
-  // float z = V.max_load_factor();
-  // V.max_load_factor ( z / 10.0 );
-  
-  
-  // std::map<string, string> state_map;
+  vector< tuple<state_type, int> > V; 
   
   int p=0;
 
-  // struct Node* root = newNode(-1,NULL);
-
-  
-  // cout << state_to_string(state) << endl;
 
   static char *status;
   status = winning_path(state);
-  //cout<<status << endl;
   string binary_status = convert_binary(status);
-  //cout<< binary_status << endl;
-  
-
-  // state_map[state_to_string(state)]=binary_status;
   outfile << state_to_string(state)  // string (key)
               << ':' 
               << binary_status // string's value 
+              << ':'
+              << -1
               << std::endl;
-  //V.insert(state);
-  V.push_back(state);
-  
-  //xcout<< state_to_string(state) << endl;
-  //printm(state_map);
+  tuple<state_type, int> V_tuple;
+  V_tuple = make_tuple (state, -1);
+  V.push_back(V_tuple);
+
 
   
   
@@ -541,18 +532,9 @@ int main(int argc, char *argv[])
     if (status[i] == 'w')
     {
       new_state = 0;
-      // tuple<state_type, struct Node*, int> queue_tuple;
-      // struct Node* newnode = newNode(i,root);
-      // root->child.push_back(newnode);
-      // // struct Node* newnode_copy = newNode(i,root_copy);
-      // // root_copy->child.push_back(newnode_copy);
-      // new_state |= (1 << (BOARD_SIZE - i - 1));
-      // queue_tuple = make_tuple (new_state,newnode, 1);
-      // std::cout << state_to_string(new_state) << endl;
-      // q.push(queue_tuple);
-      tuple<state_type, int> queue_tuple;
+      tuple<state_type, int, int> queue_tuple;
       new_state |= (1 << (BOARD_SIZE - i - 1));
-      queue_tuple = make_tuple (new_state, 1);
+      queue_tuple = make_tuple (new_state, 1, i);
       q.push(queue_tuple);
       
     }
@@ -562,93 +544,69 @@ int main(int argc, char *argv[])
   while (!q.empty())
   {
     it++;
-    // if (it%100000 == 0) 
-    //   outfile.flush(); 
-    //cout << "--------------------------------------------"<< it << "------------------------------------------"<<endl;
-    //cout<< q.size()<<endl;
     if (it %100000 == 0)
       cout<< it << endl;
     state = std::get<0>(q.front());
+    int last = std::get<2>(q.front());
     string state_str = state_to_string(state);
     cur_piece_n = count(state_str.begin(), state_str.end(), 'X');
     if (cur_piece_n > pre_piece_n)
-      V.clear();
+      V.clear();//prevent list getting to large incresing the searching time
+                // tried unordered set but seems slower, maybe relates to the memory allocation.
     pre_piece_n = cur_piece_n;
-    //cout << state_to_string (state) << endl;
-    // if visited
 
 
-    if (if_visited(V, state))
+    if (if_visited(V, state, last))
     {
-      //cout<< "visited"<<endl;
-      //cout << state_to_string (state) << endl;
       q.pop();
       continue;
     }
     status = winning_path(state);
-    // struct Node* parent_node = std::get<1>(q.front());
     int p = std::get<1>(q.front());
+    // cout << "piece "<<last << "------ " << state_to_string(state) << endl;
     q.pop();
-    // std::cout << status << endl;
-    // std::cout <<parent_node->key << endl;
-    // std::cout << p << endl;
 
     // first player
     if (p==0)
     {
       string binary_status = convert_binary(status);
-    //cout<< binary_status << endl;
-  
-
-      // state_map[state_to_string(state)]=binary_status;
-      outfile << state_to_string(state)  // string (key)
+      outfile << state_to_string(state)  
             << ':' 
-            << binary_status // string's value 
+            << binary_status 
+            << ':' 
+            << last 
             << std::endl;
-      //V.insert(state);
-      V.push_back(state);
+      tuple<state_type, int> V_tuple;
+      V_tuple = make_tuple (state, last);
+      V.push_back(V_tuple);
       
-
-      //xcout<< state_to_string(state) << endl;
-      //printm(state_map);
-      // std::cout << status << endl;
       for(int i=0; i<BOARD_SIZE; ++i)
       {
         if (status[i] == 'w')
         {
           new_state = state;
-          // struct Node* newnode = newNode(i,parent_node);
-          // parent_node->child.push_back(newnode);
-          // tuple<state_type, struct Node*, int> queue_tuple;
-          // new_state |= (1 << (BOARD_SIZE - i - 1));
-          // queue_tuple = make_tuple (new_state,newnode, 1-p);
-          // //std::cout << state_to_string(new_state) << endl;
-          // q.push(queue_tuple);
-          tuple<state_type, int> queue_tuple;
+          tuple<state_type, int, int> queue_tuple;
           new_state |= (1 << (BOARD_SIZE - i - 1));
-          queue_tuple = make_tuple (new_state, 1-p);
+          queue_tuple = make_tuple (new_state, 1-p, i);
           q.push(queue_tuple);
           
           
         }
       }
-      // p=(++p)%2;
-      // cout << "pppppppppppppppppppppp"<< p << "pppppppppppppppppppppp"<<endl;
     }
     // second player
     else if (p==1)
     {
-      string binary_status = convert_binary_2(status);
-      // cout<< status << endl;
-      //cout<< state_to_string(state) << endl;
-      //cout<< status << endl;
-      // state_map[state_to_string(state)]=binary_status;
-      outfile << state_to_string(state)  // string (key)
-              << ':' 
-              << binary_status // string's value 
-              << std::endl;
-      //V.insert(state);
-      V.push_back(state);
+      string binary_status = convert_binary(status);
+      outfile << state_to_string(state) 
+            << ':' 
+            << binary_status 
+            << ':' 
+            << last 
+            << std::endl;
+      tuple<state_type, int> V_tuple;
+      V_tuple = make_tuple (state, last);
+      V.push_back(V_tuple);
       
       //printm(state_map);
       for(int i=0; i<BOARD_SIZE; ++i)
@@ -656,23 +614,15 @@ int main(int argc, char *argv[])
         if (status[i] == 'w' || status[i] == '.')
         {
           new_state = state;
-          // struct Node* newnode = newNode(i,parent_node);
-          // parent_node->child.push_back(newnode);
-          // tuple<state_type, struct Node*, int> queue_tuple;
-          // new_state |= (1 << (BOARD_SIZE - i - 1));
-          // queue_tuple = make_tuple (new_state,newnode, 1-p);
-          // //std::cout << state_to_string(new_state) << endl;
-          // q.push(queue_tuple);
-          tuple<state_type, int> queue_tuple;
+          tuple<state_type, int, int> queue_tuple;
           new_state |= (1 << (BOARD_SIZE - i - 1));
-          queue_tuple = make_tuple (new_state, 1-p);
+          queue_tuple = make_tuple (new_state, 1-p, i);
           // std::cout << '----------------------------' << endl;
           q.push(queue_tuple);
           
         }
       }
-      // p=(++p)%2;
-      // cout << "pppppppppppppppppppppp"<< p << "pppppppppppppppppppppp" <<endl;
+
     }
 
   
@@ -682,40 +632,5 @@ int main(int argc, char *argv[])
   cout << "end" << endl;
   printf("fun() took %f seconds to execute \n", cpu_time_used); 
   
-
-
-  // for (auto const& x : state_map)
-  // {
-  //   outfile << x.first  // string (key)
-  //             << ':' 
-  //             << x.second // string's value 
-  //             << std::endl ;
-  // }
   return 0;
-  // printv(root->child);
-  // while (!q.empty())
-  // {
-  //   std::cout << state_to_string(q.front()) << endl;
-  //   q.pop();
-  // }
-
-  // int move;
-  // cin >> move;
-
-  // new_state |= (1 << (BOARD_SIZE - move - 1));
-
-  // if(new_state != state)
-  //   p=(++p)%2;
-  // state = new_state;
-  // }
-
-
-    // catch(string err)
-    // {
-    //     cerr << err << endl;
-    // }
-    // catch (std::exception const err)
-    // {
-    //     cerr << err.what() << endl;
-    // }
 }
