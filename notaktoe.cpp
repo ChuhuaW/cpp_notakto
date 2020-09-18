@@ -505,7 +505,7 @@ int main(int argc, char *argv[])
   state_type state=0, new_state=0;
   // queue of current state, parent node, current player
   queue< tuple<state_type, int, int> > q; 
-  // visited
+  // visited queue, each element is a tuple of (state, last move)
   vector< tuple<state_type, int> > V; 
   
   int p=0;
@@ -518,7 +518,7 @@ int main(int argc, char *argv[])
               << ':' 
               << binary_status // string's value 
               << ':'
-              << -1
+              << -1 // whene the board is empty, not last move
               << std::endl;
   tuple<state_type, int> V_tuple;
   V_tuple = make_tuple (state, -1);
@@ -529,13 +529,15 @@ int main(int argc, char *argv[])
   
   for(int i=0; i<BOARD_SIZE; ++i)
   {
-    if (status[i] == 'w')
+    if (status[i] == 'w')// force a win move
     {
+
       new_state = 0;
       tuple<state_type, int, int> queue_tuple;
       new_state |= (1 << (BOARD_SIZE - i - 1));
-      queue_tuple = make_tuple (new_state, 1, i);
+      queue_tuple = make_tuple (new_state, 1, i); // state, player, last move
       q.push(queue_tuple);
+
       
     }
   }
@@ -587,7 +589,7 @@ int main(int argc, char *argv[])
           new_state = state;
           tuple<state_type, int, int> queue_tuple;
           new_state |= (1 << (BOARD_SIZE - i - 1));
-          queue_tuple = make_tuple (new_state, 1-p, i);
+          queue_tuple = make_tuple (new_state, 1-p, i);  // state, player, last move
           q.push(queue_tuple);
           
           
@@ -611,12 +613,12 @@ int main(int argc, char *argv[])
       //printm(state_map);
       for(int i=0; i<BOARD_SIZE; ++i)
       {
-        if (status[i] == 'w' || status[i] == '.')
+        if (status[i] == 'w' || status[i] == '.') // all states except suicide
         {
           new_state = state;
           tuple<state_type, int, int> queue_tuple;
           new_state |= (1 << (BOARD_SIZE - i - 1));
-          queue_tuple = make_tuple (new_state, 1-p, i);
+          queue_tuple = make_tuple (new_state, 1-p, i);  // state, player, last move
           // std::cout << '----------------------------' << endl;
           q.push(queue_tuple);
           
