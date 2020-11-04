@@ -13,10 +13,16 @@
 #include <iomanip>
 #include <typeinfo>
 #include <tuple> 
-#include <map>
 #include <time.h>
 #include <fstream>
 #include <unordered_set>
+#include <map> 
+#include <sstream>
+#include <iterator>
+#include <unordered_map>
+#include "parallel_hashmap/phmap.h"
+
+using phmap::flat_hash_map;
 
 typedef uint64_t state_type;
 using namespace std;
@@ -37,7 +43,7 @@ inline state_type get_hash(state_type s2) {    return XXH64((char *) &s2, sizeof
 string state_to_string(state_type state)
 {
   string r;
-    string s= bitset<64>(state).to_string('.','X').substr(64-BOARD_COLS*BOARD_ROWS);
+    string s= bitset<64>(state).to_string('0','1').substr(64-BOARD_COLS*BOARD_ROWS);
     
     // for(uint i=0; i<BOARD_ROWS; i++)
     //   r += s.substr(i * BOARD_COLS, BOARD_COLS) + "\n";
@@ -253,6 +259,7 @@ void bitcache_init(state_type count)
      }
 
    cerr << "done initializing " << endl;
+
  }
 
 vector<state_type> ct;
@@ -387,13 +394,13 @@ void reverseChar(char* str) {
 
 
 
-void printm(std::map<string,string> input)
-{
-	for (std::map<string,string>::iterator it=input.begin(); it!=input.end(); ++it)
-  {
-    std::cout << it->first << " => " << it->second << '\n';
-	}
-}
+// void printm(std::map<string,string> input)
+// {
+// 	for (std::map<string,string>::iterator it=input.begin(); it!=input.end(); ++it)
+//   {
+//     std::cout << it->first << " => " << it->second << '\n';
+// 	}
+// }
 
 char *winning_path(state_type state)
 {
@@ -431,44 +438,88 @@ string convert_binary(string s){
   return bin;
     
 }
-
-
-
-bool if_visited(vector< tuple<state_type, int> > v, state_type x, int last)
+state_type pos_to_state(int pos, state_type last_move_state)
 {
+  // state_type new_state = 0;
+  for(int i=0; i<BOARD_SIZE; ++i)
+  {
+    if (i == pos)// force a win move
+    {
+      state_type new_state = last_move_state;
+      new_state |= (1 << (BOARD_SIZE - i - 1));
+      return new_state;
+    }
+  }
+  
+}
+
+//TODO: CONSTANT
+//TODO: c++ ampersand after type
+static vector<state_type> Vl; 
+bool if_visited(const vector<state_type> v, state_type x, int last)
+{
+  int index;
   state_type s, s2;
   int pos;
+  // cout<<"last: "<< last<<" x: " << state_to_string(x)<<endl;
   for (int i=0; i<=5; ++i)
   {
     s = get_equiv_state(x, i);
-    pos = get_equiv_move(last, i, BOARD_ROWS, BOARD_COLS);
-    tuple<state_type, int> s_tuple;
-    s_tuple = make_tuple (s, pos);
+    
+    
+    auto it = find(v.begin(), v.end(), s); 
+//   
     // cout << "find x "<< i << " "<< state_to_string(s) << endl;
-    if (std::count(v.begin(), v.end(), s_tuple))
+
+    if (it != v.end())
     {
+      pos = get_equiv_move(last, i, BOARD_ROWS, BOARD_COLS);
+      index = distance(v.begin(), it); 
+      // if (state_to_string(v[index]) =="101010010") 
+      // cout<<"pos: "<< pos<< "vl: " << state_to_string(Vl[index])<<endl;
+      state_type last_move_state= Vl[index];
+      state_type current_move_state = pos_to_state(pos,last_move_state);
+      Vl[index] = current_move_state;
       // cout << "find x " << state_to_string(s) << endl;
       // cout << "last " << pos << endl;
       return true;
-    } 
+    }
   }
   s2 = get_equiv_state(s, 1);
-  pos = get_equiv_move(last, 6, BOARD_ROWS, BOARD_COLS);
-  tuple<state_type, int> s_tuple;
-  s_tuple = make_tuple (s2, pos);
+  
   // cout << "find x "<< 6 << " "<< state_to_string(s2) << endl;
-  if (std::count(v.begin(), v.end(), s_tuple))
+  auto it = find(v.begin(), v.end(), s2); 
+  if (it != v.end())
   {
+    pos = get_equiv_move(last, 6, BOARD_ROWS, BOARD_COLS);
+    index = distance(v.begin(), it); 
+    // if (state_to_string(v[index]) =="101010010") 
+    //   cout<<"pos: "<< pos<<"vl: " << state_to_string(Vl[index])<<endl;
+    state_type last_move_state= Vl[index];
+    state_type current_move_state = pos_to_state(pos,last_move_state);
+    Vl[index] = current_move_state;
+    //cout << state_to_string(current_move_state)<<endl;
+    //vl[0].push_back(pos);
     // cout << "find x " << state_to_string(s2) << endl;
     // cout << "last " << pos << endl;
     return true;
   } 
   s2 = get_equiv_state(s2, 3);
-  pos = get_equiv_move(last, 7, BOARD_ROWS, BOARD_COLS);
-  s_tuple = make_tuple (s2, pos);
+  
+  // s_tuple = make_tuple (s2, pos);
   // cout << "find x "<< 7 << " "<< state_to_string(s2) << endl;
-  if (std::count(v.begin(), v.end(), s_tuple))
+  it = find(v.begin(), v.end(), s2); 
+  if (it != v.end())
   {
+    pos = get_equiv_move(last, 7, BOARD_ROWS, BOARD_COLS);
+    index = distance(v.begin(), it);
+    // if (state_to_string(v[index]) =="101010010") 
+    //   cout<<"pos: "<< pos<< "vl: " << state_to_string(Vl[index])<<endl;
+    state_type last_move_state= Vl[index];
+    state_type current_move_state = pos_to_state(pos,last_move_state);
+    Vl[index] = current_move_state;
+    //cout << state_to_string(current_move_state)<<endl;
+    //vl[0].push_back(pos);
     // cout << "find x " << state_to_string(s2) << endl;
     // cout << "last " << pos << endl;
     return true;
@@ -476,8 +527,204 @@ bool if_visited(vector< tuple<state_type, int> > v, state_type x, int last)
   return false;
   
 }
+
+
+
+
+std::ostringstream vec2str(const vector<int> v)
+{
+  std::ostringstream oss;
+  if (!v.empty())
+  {
+    // Convert all but the last element to avoid a trailing ","
+    std::copy(v.begin(), v.end()-1,
+        std::ostream_iterator<int>(oss, ","));
+
+    // Now add the last element with no delimiter
+    oss << v.back();
+    // std::string s = oss.str();
+    return oss;
+  }
+}
+
+bool check_key(const map<state_type, vector<int>> v, state_type x) 
+{ 
+    // Key is not present 
+    if (v.find(x) == v.end()) 
+        return false; 
+  
+    return true; 
+} 
+
+
+
+bool check_knight(int last, int current) 
+{ 
+  int last_x = last/BOARD_ROWS;
+  int last_y = last % BOARD_COLS;
+  //cout << "last: " << last_x << " :: " << last_y << endl;
+  int curr_x = current/BOARD_ROWS;
+  int curr_y = current % BOARD_COLS;
+  //cout << "curr: " << curr_x << " :: " << curr_y << endl;
+  int diff_x = curr_x - last_x;
+  int diff_y = curr_y - last_y;
+
+  //cout << "diff_x: " << diff_x << " :: " << diff_y << endl;
+  if ((abs(diff_x) ==2 && abs(diff_y) ==1) || (abs(diff_y) ==2 && abs(diff_x) ==1))
+  {
+    return true;
+  }
+  return false;
+} 
+
+// flat_hash_map<state_type, vector<int>> if_visited( flat_hash_map<state_type, vector<int>> v, state_type x, int last)
+// {
+//   state_type s;
+//   // vector<int> last_vec;
+//   int pos;
+//   // map<state_type, vector<int>> v_new;
+//   for (int i=0; i<=5; ++i)
+//   {
+//     s = get_equiv_state(x, i);
+//     pos = get_equiv_move(last, i, BOARD_ROWS, BOARD_COLS);
+//     flat_hash_map<state_type, vector<int>>::iterator got = v.find(s);
+//     if ( got != v.end() )
+//     { 
+//       if (std::count(v[s].begin(), v[s].end(), pos))
+//       {
+        
+//         return v;
+//       }
+//       else
+//       {
+//         //v_new = v;
+//         got->second.push_back(pos);
+//         return v;
+//       }
+//     }
+
+//   }
+//   s = get_equiv_state(s, 1);
+//   pos = get_equiv_move(last, 6, BOARD_ROWS, BOARD_COLS);
+//   flat_hash_map<state_type, vector<int>>::iterator got = v.find(s);
+//   if ( got != v.end() )
+//   {
+//     if (std::count(v[s].begin(), v[s].end(), pos))
+//     {
+//       return v;
+//     }
+//     else
+//     {
+//       //v_new = v;
+//       got->second.push_back(pos);
+//       return v;
+//     }
+//   }
+//   s = get_equiv_state(s, 3);
+//   pos = get_equiv_move(last, 7, BOARD_ROWS, BOARD_COLS);
+//   got = v.find(s);
+//   if ( got != v.end() )
+//   {
+//     if (std::count(v[s].begin(), v[s].end(), pos))
+//     {
+//       return v;
+//     }
+//     else
+//     {
+//       //v = v;
+//       got->second.push_back(pos);
+//       return v;
+//     }
+//   }
+
+//   vector<int> last_vector;
+//   last_vector.push_back(last);
+//   v.insert(make_pair(x,last_vector));
+//   // v[x] = last_vector;
+//   return v;
+  
+// }
+
+
+// std::pair<vector<state_type>, vector<vector<int>>> if_visited(vector<state_type> vs, vector<vector<int>> vl, state_type x, int last)
+// {
+//   state_type s, s2;
+//   int pos, index;
+//   // auto it,itt;
+//   vector<int> new_vl;
+//   for (int i=0; i<=5; ++i)
+//   {
+//     s = get_equiv_state(x, i);
+//     pos = get_equiv_move(last, i, BOARD_ROWS, BOARD_COLS);
+
+    
+//     auto it = find(vs.begin(), vs.end(), s); 
+//     if (it != vs.end()) 
+//     {
+//       index = distance(vs.begin(), it); 
+//       new_vl = vl[index];
+//       // auto itt = find(new_vl.begin(), new_vl.end(), pos); 
+//       // if (itt != new_vl.end()) 
+//       // {
+//       //   return make_pair(vs,vl);
+//       // }
+//       // else
+//       // {
+//         new_vl.push_back(pos);
+//         vl[index] = new_vl;
+//         return make_pair(vs,vl);
+//       // }
+//     }
+//   }
+//   s = get_equiv_state(s, 1);
+//   pos = get_equiv_move(last, 6, BOARD_ROWS, BOARD_COLS);
+
+//   // cout << "find x "<< 6 << " "<< state_to_string(s2) << endl;
+//   auto it = find(vs.begin(), vs.end(), s); 
+//   if (it != vs.end()) 
+//   {
+//     index = distance(vs.begin(), it); 
+//     new_vl = vl[index];
+//     // auto itt = find(new_vl.begin(), new_vl.end(), pos); 
+//     // if (itt != new_vl.end()) 
+//     // {
+//     //   return make_pair(vs,vl);
+//     // }
+//     // else
+//     // {
+//       new_vl.push_back(pos);
+//       vl[index] = new_vl;
+//     //   return make_pair(vs,vl);
+//     // }
+//   }
+//   s = get_equiv_state(s, 3);
+//   pos = get_equiv_move(last, 7, BOARD_ROWS, BOARD_COLS);
+//   it = find(vs.begin(), vs.end(), s); 
+//   if (it != vs.end()) 
+//   {
+//     index = distance(vs.begin(), it); 
+//     new_vl = vl[index];
+//     // auto itt = find(new_vl.begin(), new_vl.end(), pos); 
+//     // if (itt != new_vl.end()) 
+//     // {
+//     //   return make_pair(vs,vl);
+//     // }
+//     // else
+//     // {
+//       new_vl.push_back(pos);
+//       vl[index] = new_vl;
+//       return make_pair(vs,vl);
+//     // }
+//   }
+//   vs.push_back(x);
+//   new_vl.push_back(last);
+//   vl.push_back(new_vl);
+//   return make_pair(vs,vl);
+// }
 int main(int argc, char *argv[])
 {
+
+
   std::ofstream outfile;
   string filename;
   cout << "save file name? (*.txt)"<<endl;
@@ -506,7 +753,10 @@ int main(int argc, char *argv[])
   // queue of current state, parent node, current player
   queue< tuple<state_type, int, int> > q; 
   // visited queue, each element is a tuple of (state, last move)
-  vector< tuple<state_type, int> > V; 
+  vector< state_type > V; 
+  // flat_hash_map<state_type, vector<int>> V; 
+  // vector<state_type> Vs; 
+
   
   int p=0;
 
@@ -514,18 +764,18 @@ int main(int argc, char *argv[])
   static char *status;
   status = winning_path(state);
   string binary_status = convert_binary(status);
-  outfile << state_to_string(state)  // string (key)
-              << ':' 
-              << binary_status // string's value 
-              << ':'
-              << -1 // whene the board is empty, not last move
-              << std::endl;
-  tuple<state_type, int> V_tuple;
-  V_tuple = make_tuple (state, -1);
-  V.push_back(V_tuple);
 
-
+  // vector<int> last_vector; 
+  // last_vector.push_back(-1);
+  // V[state] = last_vector;
   
+  V.push_back(state);
+  Vl.push_back(0);
+  //vector<int> no_plyer;
+  //no_plyer.push_back(-1);
+  //Vl.push_back(no_plyer);
+
+  std::ostringstream oss;
   
   for(int i=0; i<BOARD_SIZE; ++i)
   {
@@ -543,26 +793,61 @@ int main(int argc, char *argv[])
   }
 
   int it = 0;
+  cout<< it << endl;
   while (!q.empty())
   {
     it++;
+    //cout<< it << endl;
     if (it %100000 == 0)
+    {
       cout<< it << endl;
+      end = clock();
+      cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
+      cout << "end" << endl;
+      printf("fun() took %f seconds to execute \n", cpu_time_used); 
+      start = clock();
+    }
     state = std::get<0>(q.front());
     int last = std::get<2>(q.front());
     string state_str = state_to_string(state);
-    cur_piece_n = count(state_str.begin(), state_str.end(), 'X');
-    if (cur_piece_n > pre_piece_n)
-      V.clear();//prevent list getting to large incresing the searching time
-                // tried unordered set but seems slower, maybe relates to the memory allocation.
-    pre_piece_n = cur_piece_n;
+    cur_piece_n = count(state_str.begin(), state_str.end(), '1');
+    if (cur_piece_n > pre_piece_n){
+      // for(unsigned i = 0; i < Vs.size(); ++i) {
+      //   outfile<< state_to_string(Vs[i])<< ": :"<< vec2str(Vl[i]).str() << endl;
+      // }
+      for(unsigned i = 0; i < Vl.size(); ++i) {
+        outfile<< state_to_string(V[i]) <<" :: " <<  state_to_string(Vl[i]) << endl;
+      }
+      // Vs.clear();//prevent list getting to large incresing the searching time
+      Vl.clear();          // tried unordered set but seems slower, maybe relates to the memory allocation.
+      V.clear();
+      
 
+      
+    }
+    pre_piece_n = cur_piece_n;
+    //   Vs.clear();//prevent list getting to large incresing the searching time
+    //   Vl.clear();          // tried unordered set but seems slower, maybe relates to the memory allocation.
+    // pre_piece_n = cur_piece_n;
+
+
+
+    // flat_hash_map<state_type, vector<int>> V_new = if_visited(V, state, last);
+    // std::pair<vector<state_type>, vector<vector<int>>> V_pair = if_visited(Vs, Vl, state, last);
+    // vector<int> temp_vl = V_pair.second;
+    // if (V_pair.second == Vl)
 
     if (if_visited(V, state, last))
     {
       q.pop();
       continue;
     }
+    // else
+    // {
+    //   Vs = V_pair.first;
+    //   Vl = V_pair.second;
+      
+    // }
     status = winning_path(state);
     int p = std::get<1>(q.front());
     // cout << "piece "<<last << "------ " << state_to_string(state) << endl;
@@ -572,20 +857,18 @@ int main(int argc, char *argv[])
     if (p==0)
     {
       string binary_status = convert_binary(status);
-      outfile << state_to_string(state)  
-            << ':' 
-            << binary_status 
-            << ':' 
-            << last 
-            << std::endl;
-      tuple<state_type, int> V_tuple;
-      V_tuple = make_tuple (state, last);
-      V.push_back(V_tuple);
-      
+      V.push_back(state);
+      state_type last_move_state= 0;
+      state_type current_move_state = pos_to_state(last,last_move_state);
+      Vl.push_back(current_move_state);
+      // vector<int> player;
+      // player.push_back(last);
+      // Vl.push_back(player);
       for(int i=0; i<BOARD_SIZE; ++i)
       {
-        if (status[i] == 'w')
+        if (status[i] == 'w' && check_knight(last,i))// force a win move
         {
+          //cout << "last: " << last << "  i: " << i << "  check: " << check_knight(last,i)<< endl;
           new_state = state;
           tuple<state_type, int, int> queue_tuple;
           new_state |= (1 << (BOARD_SIZE - i - 1));
@@ -600,17 +883,13 @@ int main(int argc, char *argv[])
     else if (p==1)
     {
       string binary_status = convert_binary(status);
-      outfile << state_to_string(state) 
-            << ':' 
-            << binary_status 
-            << ':' 
-            << last 
-            << std::endl;
-      tuple<state_type, int> V_tuple;
-      V_tuple = make_tuple (state, last);
-      V.push_back(V_tuple);
-      
-      //printm(state_map);
+      V.push_back(state);
+      state_type last_move_state= 0;
+      state_type current_move_state = pos_to_state(last,last_move_state);
+      Vl.push_back(current_move_state);
+      // vector<int> player;
+      // player.push_back(last);
+      // Vl.push_back(player);
       for(int i=0; i<BOARD_SIZE; ++i)
       {
         if (status[i] == 'w' || status[i] == '.') // all states except suicide
@@ -629,8 +908,32 @@ int main(int argc, char *argv[])
 
   
   }
-  end = clock();
-  cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
+  std::cout << "mymap's buckets contain:\n";
+  // for (std::pair<state_type, vector<int>> element : V)
+  // {
+  //     outfile << state_to_string(element.first) << " :: " << vec2str(element.second).str() << std::endl;
+  // }
+  // outfile << state_to_string(state)  // string (key)
+  //             << ':' 
+  //             << binary_status // string's value 
+  //             << ':'
+  //             << oss.str() // whene the board is empty, not last move
+  //             << std::endl;
+  
+  // for (auto items : zip(Vs, Vl)) {
+  //   cout<< state_to_string(get<0>(items))<< vec2str(get<1>(items)).str() << endl;
+  // }
+
+  // for(unsigned i = 0; i < Vs.size(); ++i) {
+  //   outfile<< state_to_string(Vs[i])<< ": :"<< vec2str(Vl[i]).str() << endl;
+  // }
+  for(unsigned i = 0; i < Vl.size(); ++i) {
+    outfile<< state_to_string(V[i]) <<" :: " <<  state_to_string(Vl[i]) << endl;
+  }
+  for(unsigned i = 0; i < Vl.size(); ++i) 
+    {
+      cout<< state_to_string(Vl[i]) << endl;
+    }
   cout << "end" << endl;
   printf("fun() took %f seconds to execute \n", cpu_time_used); 
   
